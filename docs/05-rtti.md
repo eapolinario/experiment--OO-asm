@@ -37,8 +37,8 @@ makes the "test and branch" idiom possible:
     jz      .not_a_file_stream
 ```
 
-C++ spells the two variants `dynamic_cast<T*>` (null on failure) and
-`dynamic_cast<T&>` (throws `std::bad_cast`), for exactly this reason.
+Languages differ only in how they report the failure: a null pointer you must
+test, or an exception you must catch. The check underneath is the same walk.
 
 ## Cost, and the standard fix
 
@@ -60,39 +60,43 @@ multiple inheritance a class has several ancestor paths and you need a real
 subtype test (bit vectors, interval numbering of the hierarchy, or a cache).
 Exercise 07 implements both and shows them agreeing.
 
-## What C++ actually does
+## What Python does
 
-- The vtable holds a pointer to a `std::type_info`-derived object
-  (`__class_type_info` and friends), at offset -8 from the address point in the
-  Itanium ABI. `typeid(x)` on a polymorphic type loads it from there.
-- `dynamic_cast` is **a real function call** into the runtime
-  (`__dynamic_cast`), not an inlined compare. For multiple and virtual
-  inheritance it has to search a graph of base-class descriptors, deal with
-  ambiguous bases, and compute pointer adjustments. It can be surprisingly
-  slow - benchmarks routinely find it far more expensive than a virtual call,
-  which is why hot code often carries its own type tag or a virtual `kind()`
-  method instead. LLVM's `isa<>`/`dyn_cast<>` exist for precisely this reason.
-- Type identity across shared libraries is compared by `type_info` *name
-  string* in the Itanium ABI when the pointers differ, which is why
-  `-fvisibility=hidden` can quietly break `dynamic_cast` across `.so`
-  boundaries.
-- `-fno-rtti` exists because the metadata is not free: it is emitted for every
-  polymorphic class, and some projects (games, embedded, Chromium) would rather
-  not pay for it.
+`isinstance` is this exercise, in the interpreter. Every object begins with a
+pointer to its type (`ob_type`, our vptr), every type has a `tp_base` (our
+`Class.parent`) and a precomputed `tp_mro` tuple, and `isinstance(x, C)` checks
+whether `C` appears in that tuple. The MRO *is* the display from the section
+above: a precomputed, ordered array of ancestors, cached on the class so the
+check does not have to walk anything.
+
+Two Python details worth noticing, because both are this mechanism leaking
+through:
+
+- **`__class__` is writable.** Assigning to it re-points the object at another
+  type, and `isinstance` immediately agrees. That is the vptr swap from
+  exercise 04, exposed as an attribute.
+- **`isinstance` is overridable.** A metaclass can define `__instancecheck__`,
+  which is how `abc.ABC` lets an unrelated class register as a subclass and how
+  `Protocol` does structural checks. Once the type test is a function rather
+  than a layout fact, it can be *anything* - the cost being that it is now a
+  call, not a compare.
 
 ## What everyone else does
 
-- **Java**: `instanceof` and checked casts are bytecodes; the JIT compiles them
-  to a small number of loads and compares, with fast paths for final classes
-  and a per-class secondary-supertype cache for interfaces. Every array store
-  into an `Object[]` also carries a hidden type check.
-- **Go**: type assertions compare the type descriptor in the interface value
-  and are cheap. `switch v := x.(type)` is the idiom.
-- **Rust**: no RTTI at all by default. Trait objects have vtables but no type
-  identity; `Any` opts into it with a `TypeId`. Downcasting is deliberately
+- **Java**: `instanceof` compiles to a few loads and compares, with fast paths
+  for final classes and a per-class cache for interfaces. Every array store
+  into an `Object[]` carries a hidden type check as well.
+- **Go**: type assertions compare the type descriptor already sitting in the
+  interface value, so they are cheap. `switch v := x.(type)` is the idiom.
+- **Rust**: no type information at all by default. Trait objects have vtables
+  but no identity; `Any` opts in with a `TypeId`. Downcasting is deliberately
   awkward because the language would rather you used an enum.
-- **Python and Ruby**: everything already carries its class; `isinstance` is a
-  chain walk (with an MRO to make multiple inheritance deterministic).
+- **Compiled languages with multiple inheritance** have the hardest job: a
+  class has several ancestor paths, so the test becomes a graph search with
+  pointer adjustments, expensive enough that performance-sensitive codebases
+  routinely ban it and carry their own type tag instead. The metadata is also
+  not free - it has to be emitted for every polymorphic class, which is why
+  toolchains offer a switch to turn the whole feature off.
 
 ## The design question
 

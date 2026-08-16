@@ -36,7 +36,7 @@ f_swim_intro:   db "  the pond holds a Swimmer* (here, the whole duck) and calls
 f_quack_intro:  db "  the sound check holds a Quacker* (duck + %ld) and calls quack:", 10, 0
 
 f_thunk_is:     db "  is the secondary quack slot the real Duck_quack?  %s   (it is a thunk)", 10, 0
-f_thunk_name:   db "  g++ emits that thunk as _ZThn16_N4Duck5quackEv", 10, 0
+f_thunk_name:   db "  every object holding two dispatch tables needs one of these", 10, 0
 f_thunk_sub:    db "  it runs `sub rdi, %ld` then jumps into Duck_quack, no frame of its own", 10, 0
 f_thunk_proof:  db "  so quack, though called on duck+%ld, still read the complete-object volume=%ld", 10, 0
 

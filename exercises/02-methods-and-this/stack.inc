@@ -19,7 +19,8 @@
 
 ; Method vocabulary. The `Stack_` prefix is our name mangling: the assembler
 ; has one flat namespace, so the class name has to be part of the symbol.
-; C++ does the same thing with more punctuation (_ZN5Stack4pushEl).
+; Python does the same thing to any attribute named __x inside class C: it is
+; stored as _C__x, for exactly this reason.
 extern Stack_init                       ; void  Stack_init(Stack *this)
 extern Stack_push                       ; long  Stack_push(Stack *this, long v)
 extern Stack_pop                        ; long  Stack_pop(Stack *this, long *out)

@@ -11,9 +11,12 @@ argument. This one adds the two things that turn a pile of functions into a
 
 **The namespace is name mangling.** The assembler has one flat symbol table, so
 `push` cannot mean two things. Prefixing the class name - `Stack_push` - is the
-whole technique. C++ does exactly this, just less legibly:
-`Stack::push(long)` becomes `_ZN5Stack4pushEl`, encoding the class, the method
-and the parameter types so that overloads get distinct symbols.
+whole technique, and it is not a workaround peculiar to assembly. Python does
+the same thing at the source level: an attribute written `self.__items` inside
+`class Stack` is stored as `_Stack__items`, so that a subclass defining its own
+`__items` cannot collide with it. Compiled languages go further and encode
+parameter types into the symbol as well, which is what makes their linker
+errors unreadable.
 
 **The boundary is what you choose to export.** `stack.asm` declares only six
 symbols `global`. The layout, the capacity constant and the failure handler are

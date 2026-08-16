@@ -20,23 +20,30 @@ Account                     SavingsAccount
                             +24  rate         <- added by the derived class
 ```
 
-Now a `SavingsAccount*` **is** an `Account*`. Not "can be converted to" - it is
+Now a `SavingsAccount` **is** an `Account`. Not "can be converted to" - it is
 the same address, and every `Account` field is at the offset the base's code
-already expects. Upcasting is free; it is a no-op that exists only in the type
-system. That is the entire structural content of single inheritance, and it is
-why C++ can say a derived object "contains" a base subobject and mean it
-literally.
+already expects. Widening the type is free; it is a no-op that exists only in
+the type system. That is the entire structural content of single inheritance.
+
+CPython does this literally. A type's `tp_basicsize` is the size of its C
+struct, and a subtype's struct begins with its base's struct: `PyLongObject`
+starts with the same header every `PyObject` starts with, which is why any C
+function taking a `PyObject *` can be handed an int without conversion. It is
+also why exercise 06's layout conflict exists - two bases cannot both be that
+prefix.
 
 Two things fall out:
 
-- **Array covariance is a memory-safety hazard.** An `Account[]` and a
-  `SavingsAccount[]` have different strides. Writing an `Account` into a
-  `SavingsAccount[]` would produce an object with no `rate`. Java allows this
-  and pays with a run-time `ArrayStoreException` check on every array write;
-  C++ makes it undefined behaviour; most later languages made arrays invariant.
-- **Slicing.** Copying a derived object into base-sized storage silently drops
-  the tail and leaves you with a base whose vptr is a base vptr. C++ programmers
-  learn this as "don't pass polymorphic objects by value".
+- **Arrays of objects are not covariant.** A block of `Account`s and a block of
+  `SavingsAccount`s have different strides, so writing one into the other's
+  storage produces an object missing its tail. Languages that allow it check at
+  run time on every write; most later languages made arrays invariant instead.
+  (Python sidesteps the question entirely: its lists hold pointers, so every
+  element is one word regardless of type.)
+- **Copying by value truncates.** Copying a derived object into base-sized
+  storage silently drops the extra fields and leaves a vptr that says "base".
+  Languages that pass objects by value have to warn about this; languages that
+  only ever pass references, Python included, never meet it.
 
 ## The derived vtable
 
@@ -65,15 +72,36 @@ Construction runs base-first: `SavingsAccount_init` calls `Account_init`, then
 installs the derived vptr, then initialises its own fields. Destruction runs in
 exactly the reverse order.
 
-The ordering is not arbitrary, and it explains a famous C++ surprise:
+The ordering is not arbitrary, and it is the source of a bug that every
+language expresses differently while having the same cause: **during
+construction, an object is not yet the type it is going to be.**
 
-> A virtual call in a base constructor does not reach the derived override.
+In our implementation, a dispatched call made before the derived vptr is
+installed reaches the *base* version, because at that instant the vtable in the
+object still says "base". Some compiled languages specify exactly that
+behaviour, since it is what the machine does.
 
-Of course it does not. At that instant the derived constructor has not yet
-overwritten the vptr, so the object *is* a base - the vtable in it says so. C++
-specifies this behaviour precisely because it is what the implementation does;
-Java made the opposite choice (the derived override runs, on an object whose
-fields are not yet initialised), which trades one kind of bug for another.
+Python takes the other option, and gets the mirror-image bug:
+
+```python
+class Base:
+    def __init__(self):
+        self.setup()            # dispatches on the real class...
+
+class Derived(Base):
+    def __init__(self):
+        super().__init__()
+        self.cache = {}
+    def setup(self):
+        self.cache['ready'] = True   # AttributeError: no attribute 'cache'
+```
+
+Here the override *does* run, because a Python object's `__class__` is correct
+from the moment it is allocated - there is no half-installed vptr. What is not
+ready is the object's *state*, so the override runs against fields that do not
+exist yet. Same hazard, opposite symptom: one language gives you the wrong
+method, the other gives you the right method at the wrong time. Both are the
+consequence of construction being a process rather than an instant.
 
 ## Virtual destructors
 
@@ -102,9 +130,11 @@ call to a known symbol:
 It has to be non-virtual. If `super.describe()` dispatched through the vtable,
 an override calling its base implementation would call itself, forever. So
 `super` is the one place where an object-oriented language deliberately turns
-dynamic dispatch off. In C++ you write the base name explicitly
-(`Account::describe()`), which also lets you say *which* base - a question that
-only has an answer once [multiple inheritance](04-interfaces.md) exists.
+dynamic dispatch off. Languages that allow more than one base have to let you
+say *which* base you mean, either by naming it explicitly or - as Python does
+with `super()` and the MRO - by defining a total order over the ancestors and
+walking it. That question only has an answer once
+[multiple inheritance](04-interfaces.md) exists.
 
 ## What inheritance costs
 
@@ -132,7 +162,8 @@ Which is why modern practice prefers composition plus interfaces: keep the
 prefix trick for *interface* conformance (exercise 06), and hold collaborators
 in fields instead of inheriting them. Go and Rust omit implementation
 inheritance entirely; Java, C# and Swift have it but push you toward interfaces
-and protocols; C++ keeps everything and asks you to be careful.
+and protocols. Python keeps implementation inheritance but leans on duck
+typing and protocols in practice, so the hierarchy usually stays shallow.
 
 Next: [interfaces and multiple inheritance](04-interfaces.md), where the prefix
 trick runs out of room.

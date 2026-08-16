@@ -47,17 +47,38 @@ inheritance" turns into: one extra pointer adjustment, or a second word in
 every interface value. Once you have written the dispatch sequence, the
 performance discussion becomes arithmetic instead of vibes.
 
-**You can read the errors.** Undefined symbol `_ZN5Stack4pushEl`? That is
-exercise 02's name mangling. A vtable relocation in a stripped `.so`? That is
-exercise 04's `.data.rel.ro`. `_ZThn16_N4Duck5quackEv` in a backtrace? That is
-exercise 06's adjustor thunk. Adding a virtual function to a base class broke a
-shipped ABI? Exercise 04 explains why, in four keystrokes.
+**You can answer the questions your own language dodges.** Why does
+`__slots__` make instances smaller and faster? Why can you add a method to a
+class at run time in Python but not in Java? Why does CPython ship a `gc`
+module when it already reference counts every object? Why is `isinstance`
+cheap but `__getattr__` a performance cliff? Each of those is a design choice
+in this repository, made visible - and once you have written both sides, the
+answers stop being trivia and become the same three or four mechanisms
+recombined.
 
 **You can build objects where there are none.** Every large C program grows an
-object system eventually: the Linux kernel's `struct file_operations` is a
-vtable, GObject is a full class system with signals, and Postgres, libcurl and
-SQLite all ship dispatch tables. Knowing the techniques means recognising the
-shape and choosing deliberately, instead of reinventing a worse version.
+object system eventually: CPython's own `PyObject` header and `PyTypeObject`
+slot table are exactly exercises 01 and 04, the Linux kernel's
+`struct file_operations` is a vtable, and Postgres, libcurl and SQLite all
+ship dispatch tables. Knowing the techniques means recognising the shape and
+choosing deliberately, instead of reinventing a worse version.
+
+## The language on the right-hand side
+
+Assembly says how; something has to say why anyone would want it. Where these
+documents need a language to point at, they mostly point at **Python**, for one
+reason: CPython is an object system implemented in C, so the mapping is
+concrete rather than analogical. `PyObject` really does begin with a refcount
+and a type pointer. `PyTypeObject` really is a table of slots. `Py_INCREF` is
+exercise 10, `_PyType_Lookup` and its cache are exercise 08, and
+`__getattr__` is exercise 09. When you read `ob_type`, you are reading the vptr
+from exercise 04.
+
+Other languages appear where they made a genuinely different choice - Go and
+Rust on interface layout, Smalltalk and Objective-C on message sends,
+JavaScript on prototypes, C++ where a symbol name or an ABI rule is the
+artifact worth showing. The point is never the language. It is that the same
+handful of mechanisms keeps reappearing under different syntax.
 
 ## Ground rules for the experiment
 

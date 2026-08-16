@@ -50,10 +50,10 @@ know the distance, so the distance is stored in the vtable:
   vtable + 16   slot 0, slot 1, ...
 ```
 
-The primary vtable's `offset_to_top` is 0; the secondary's is 16. The real C++
-(Itanium) ABI stores this as a signed number it *adds*, so a secondary base
-holds `-16`; `mi_object.inc` stores the non-negative amount to subtract, which
-reads more directly. The arithmetic is the same either way.
+The primary vtable's `offset_to_top` is 0; the secondary's is 16. Real compiled
+ABIs store this as a signed number they *add*, so a secondary base holds `-16`;
+`mi_object.inc` stores the non-negative amount to subtract, which reads more
+directly. The arithmetic is the same either way.
 
 ## The adjustor thunk
 
@@ -61,7 +61,7 @@ The static, compile-time fix-up. The Quacker vtable's `quack` slot does **not**
 point at `Duck_quack`. It points at a three-instruction stub:
 
 ```asm
-Duck_quack_thunk:                       ; g++ calls this _ZThn16_N4Duck5quackEv
+Duck_quack_thunk:
     sub     rdi, 16                     ; Quacker* -> complete Duck*
     jmp     Duck_quack                  ; tail-call the real body, no frame
 ```
@@ -69,10 +69,10 @@ Duck_quack_thunk:                       ; g++ calls this _ZThn16_N4Duck5quackEv
 The client loads slot 0 of the secondary vtable and calls it with
 `rdi = duck + 16`. The thunk subtracts 16 and jumps into the real method, which
 now sees the complete object and reads `volume` correctly. `Duck_quack` never
-learns it was reached through a second interface. g++ emits one of these per
-overridden method per secondary base, with names like `_ZThn16_N4Duck5quackEv`
-("non-virtual thunk, `this` offset -16, to `Duck::quack()`"). The program
-proves the thunk is really there - the slot's address is not `Duck_quack` - and
+learns it was reached through a second interface. Any compiler that lets one
+object hold two dispatch tables emits one of these per method per secondary
+interface, under some generated name. The program proves the thunk is really
+there - the slot's address is not `Duck_quack` - and
 that it works, by reading a complete-object field through it.
 
 ## offset_to_top, which is what `dynamic_cast<void*>` does
@@ -149,8 +149,7 @@ and into the pointer's width.
   Watch a second `offset_to_top` and a second thunk appear, and the fat-pointer
   path need only one more itable - no new object field.
 - Reorder the struct so `Quacker` is the primary base and `Swimmer` the
-  secondary. The thunk moves to `swim`, `offset_to_top` swaps, and the g++
-  thunk name would become `_ZThn16_..._swim`.
+  secondary. The thunk moves to `swim` and `offset_to_top` swaps over.
 - Store a `Quacker*` and a fat Quacker value into arrays of the same element
   size. Only the thin pointer fits in one word; the fat value needs two - the
   trade-off made physical.

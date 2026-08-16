@@ -20,11 +20,11 @@ frees it; a client that receives a pointer had better know whether it is
 borrowing or owning. This is C, and it works, given discipline and a naming
 convention (`_create`/`_destroy`, "the caller frees the returned buffer").
 
-C++ makes it *structurally* reliable with RAII: bind the lifetime to a scope
-and let the compiler emit the destructor call on every exit path, including
-exceptional ones. That is the single most valuable thing C++ added to C, and
-it is why `unique_ptr` is nearly free - it is exercise 03 with the calls
-inserted for you.
+Scope-bound cleanup makes it *structurally* reliable: bind the lifetime to a
+scope and let the compiler emit the release on every exit path, including the
+exceptional ones. C++ calls this RAII; Python's `with` and Go's `defer` are the
+explicit, opt-in version of the same idea. In every case it is exercise 03 with
+the calls inserted for you.
 
 Rust makes it *statically checked*: ownership is a type property, moves are
 tracked, borrows are checked, and `Drop` runs at the end of the owner's scope.
@@ -49,8 +49,8 @@ Properties that make it popular:
   with scarce resources - file descriptors and locks get released on time.
 - **No pauses**, no scanning, no separate heap traversal. Memory use tracks the
   program's actual working set.
-- **It is implementable in a library**, which is why C++ has `shared_ptr` and
-  C does it by hand.
+- **It needs no runtime support**, so it can live in a library or be written
+  by hand - which is exactly why this exercise is possible at all.
 
 And the costs, which are equally real:
 
@@ -71,8 +71,9 @@ And the costs, which are equally real:
 
 The standard escape from cycles: a reference that does not contribute to the
 count and is detectable (or nulled) when the target dies. Parent-to-child
-strong, child-to-parent weak; observers weak; caches weak. `weak_ptr` in C++,
-`Weak` in Rust, `__weak` in ARC, `WeakReference` in Java.
+strong, child-to-parent weak; observers weak; caches weak. Python spells it
+`weakref.ref` (and `WeakValueDictionary` for caches, which is the common case);
+Rust spells it `Weak`, ARC spells it `__weak`, C++ spells it `weak_ptr`.
 
 Implementations differ in cost and honesty. A "side table" (the target keeps a
 list of weak slots to clear, or a shared control block holds both counts) makes
@@ -119,9 +120,9 @@ that cannot wait.
 - **Objective-C / Swift ARC**: the compiler inserts the retain/release calls
   that a programmer used to write, elides what it can prove redundant, and
   leaves cycles to `weak`/`unowned` annotations.
-- **C++**: manual by default, RAII by convention, `shared_ptr` when ownership
-  is genuinely shared - and the community's advice is to reach for it last,
-  because unique ownership is cheaper and clearer.
+- **C++**: manual by default, scope-bound cleanup by convention, shared
+  ownership only when it is genuinely shared - the advice being to reach for
+  the counted pointer last, because unique ownership is cheaper and clearer.
 - **Java, Go, C#**: tracing GC, plus explicit lifetime constructs for
   non-memory resources.
 

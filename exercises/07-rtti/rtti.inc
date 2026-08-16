@@ -1,12 +1,11 @@
 ;; rtti.inc - a tiny runtime type information "runtime", separate from the
 ;; classes that use it.
 ;;
-;; This split is deliberate. In C++ the machinery below is not in your program
-;; at all: `typeid` and `dynamic_cast` are serviced by functions the compiler
-;; links in from libstdc++ (`__dynamic_cast`) plus per-class `__class_type_info`
-;; records the compiler emits next to each vtable. Your classes only supply the
-;; metadata; the runtime does the walking. rtti.asm is that runtime; stream.asm
-;; supplies the metadata.
+;; This split is deliberate, and it mirrors how every language does it. Your
+;; classes supply metadata; something else does the walking. `isinstance` is
+;; not a method on your class - it is interpreter code that reads the type
+;; pointer your object already carries. rtti.asm is that interpreter code;
+;; stream.asm is the metadata.
 
 %ifndef RTTI_INC
 %define RTTI_INC

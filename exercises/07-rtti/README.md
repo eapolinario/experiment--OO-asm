@@ -113,23 +113,24 @@ derived-only `ratio`) and returning `NULL` for a plain `FileStream`.
    filtered first by `is-a Stream` (3 of 4) then by `is-a FileStream` (2 of 4).
    `Widget` is dropped both times.
 
-## What C++ actually does
+## What real runtimes do
 
-The model here is deliberately close to the real one, with two honest
+The model here is deliberately close to the real thing, with a few honest
 simplifications worth naming:
 
-- **RTTI lives beside the vtable.** In the Itanium C++ ABI the word *before* a
-  vtable's first method slot points at a `std::type_info` - concretely a
-  `__class_type_info` (or `__si_class_type_info` / `__vmi_class_type_info` for
-  single- and multiple-inheritance cases). Our `vtable[0]` pointing at a class
-  descriptor is the same idea with less machinery. `typeid(x)` is just a load
-  of that word.
-- **`dynamic_cast` is a real function call.** The compiler does not inline a
-  chain walk; it calls `__dynamic_cast` in libstdc++, passing the type_info
-  records. For multiple and virtual inheritance that routine performs a graph
-  search and can be *surprisingly* slow - slow enough that a lot of
-  performance-sensitive C++ bans it and dispatches another way (a visitor, a
-  hand-rolled tag, a variant).
+- **Python precomputes the answer.** `isinstance(x, C)` does not walk anything
+  in the common case: every type carries `tp_mro`, a tuple of its ancestors
+  built once at class-creation time, and the check is a scan of that tuple.
+  That is the display from the section above, kept on the class. Our
+  `.parent` chain is the version you build before you think of caching it.
+- **Type metadata sits next to the dispatch table.** Our `vtable[0]` pointing
+  at a class descriptor is what compiled languages do too; they usually park it
+  just before the first method slot, so a type query is one load at a known
+  offset from the vptr.
+- **Checked casts can be expensive.** With single inheritance the test is a few
+  loads. With multiple inheritance it becomes a graph search with pointer
+  adjustments, expensive enough that performance-sensitive codebases ban the
+  feature and dispatch another way - a visitor, a hand-rolled tag, a variant.
 - **`-fno-rtti` exists** precisely because the metadata is not free: it is
   code size and data size in every translation unit, whether or not you ever
   call `typeid`. Projects that never downcast (LLVM, many game engines) compile

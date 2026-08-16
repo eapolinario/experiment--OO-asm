@@ -29,9 +29,9 @@
 ;;   vtable + 8    Class*          the run-time type (shared by all subobjects)
 ;;   vtable + 16   slot 0, then 8 bytes per slot
 ;;
-;; (The Itanium C++ ABI stores offset_to_top as a signed number it ADDs, so a
-;; secondary base holds -16. We store the non-negative amount to subtract,
-;; which reads more directly; the arithmetic is otherwise identical.)
+;; (Real compiled ABIs store this as a signed number they ADD, so a secondary
+;; base holds -16. We store the non-negative amount to subtract, which reads
+;; more directly; the arithmetic is otherwise identical.)
 
 %ifndef MI_OBJECT_INC
 %define MI_OBJECT_INC

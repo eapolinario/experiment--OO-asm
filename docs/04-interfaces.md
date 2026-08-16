@@ -10,9 +10,10 @@ derived object. Two bases cannot both sit at the front. Something has to give.
 This is where a hand-written object system stops being a pleasant exercise and
 starts explaining why real ABIs look the way they do.
 
-## Technique 1: secondary vtables and thunks (the C++ way)
+## Technique 1: one vptr per interface
 
-Give the object one vptr per base, at different offsets:
+Give the object a separate vptr for each interface it implements, at different
+offsets:
 
 ```
 Duck                            Duck_vtable_Quacker (primary, offset_to_top 0)
@@ -20,51 +21,58 @@ Duck                            Duck_vtable_Quacker (primary, offset_to_top 0)
 +8    name                      [ 8]  Class* = Duck
 +16   vptr  -> Swimmer table    [16]  quack -> Duck_quack
 +24   stamina                   ...
-                                Duck_vtable_Swimmer (secondary, offset_to_top -16)
-                                [ 0]  offset_to_top = -16
+                                Duck_vtable_Swimmer (secondary, offset_to_top 16)
+                                [ 0]  offset_to_top = 16
                                 [ 8]  Class* = Duck
                                 [16]  swim -> thunk -> Duck_swim
 ```
 
-A client that wants a `Swimmer*` is handed `duck + 16`, not `duck`. The pointer
-value *changes* on the cast. Everything else follows from that one fact:
+A client that wants a `Swimmer` is handed `duck + 16`, not `duck`. The pointer
+value *changes* when you view the object as its second interface. Everything
+else follows from that one fact:
 
-- **Casting is arithmetic, not a no-op.** `(Swimmer*)duck` is `duck + 16`, and
-  `(Duck*)swimmer` is `swimmer - 16`. A null check has to be part of it, since
-  casting a null pointer must yield null rather than 16.
+- **Converting is arithmetic, not a no-op.** Viewing a Duck as a Swimmer is
+  `duck + 16`, and going back is `swimmer - 16`. A null check has to be part of
+  it, since converting a null pointer must yield null rather than 16.
 - **The method body still needs the complete object.** `Duck_swim` wants to
   read `name` at offset 8 from the *start* of the Duck, but it will be called
-  with `this` pointing 16 bytes in. So the secondary vtable does not point at
-  `Duck_swim` directly; it points at an **adjustor thunk**:
+  with the receiver pointing 16 bytes in. So the secondary vtable does not
+  point at `Duck_swim` directly; it points at an **adjustor thunk**:
 
   ```asm
   Duck_swim_thunk:
-      sub     rdi, 16         ; this -= offset to the complete object
+      sub     rdi, 16         ; receiver -= offset to the complete object
       jmp     Duck_swim       ; tail call: the thunk leaves no frame
   ```
 
-  g++ emits these with names like `_ZThn16_N4Duck4swimEv` - `Th` for thunk,
-  `n16` for "non-virtual, 16". If you have ever seen one in a backtrace, this
-  is what it was.
+  Every compiled language that puts more than one dispatch table inside a
+  single object ends up emitting these, under one name or another.
 - **`offset_to_top` makes the adjustment discoverable at run time.** Given any
-  interface pointer, `this + vtable[offset_to_top]` recovers the complete
-  object. That is exactly what `dynamic_cast<void*>` does, and it is why the
-  field is in the real Itanium ABI vtable too (just at a negative offset from
-  the address point, along with the typeinfo pointer).
+  interface pointer, subtracting `vtable[offset_to_top]` recovers the complete
+  object, without the caller knowing which interface it was holding.
 
-The Itanium C++ ABI layout, for comparison with ours:
+That last field is the price of admission. Once an object has two dispatch
+tables, a pointer to it is ambiguous - "which view is this?" - and the answer
+has to be stored somewhere the runtime can find it.
 
+### Where you have already met this problem
+
+Python hits the same wall, and reports it in as many words:
+
+```python
+>>> class A(int): pass
+>>> class B(str): pass
+>>> class C(A, B): pass
+TypeError: multiple bases have instance lay-out conflict
 ```
-        -16   offset-to-top
-         -8   typeinfo pointer
-vptr ->   0   first virtual function
-          8   second virtual function
-```
 
-The vptr points at the *address point*, in the middle of the structure, so that
-slot numbering stays positive and the metadata lives behind it. We put
-`offset_to_top` and the class pointer in front and start slots at +16, which is
-the same idea with easier arithmetic.
+`int` and `str` each need their own storage at the front of the object, and
+CPython cannot put both there. Inheriting from two *ordinary* Python classes is
+fine, because they add no C-level layout; inheriting from two classes that do
+is exactly the collision this exercise builds by hand. Every language with
+multiple bases either solves it (offsets and thunks, below), forbids it
+(single inheritance plus field-free interfaces), or moves the tables out of the
+object entirely (fat pointers, further down).
 
 ### Diamonds
 
@@ -96,9 +104,9 @@ table of the methods that type provides for that interface. Calling is:
     call    rax                     ; receiver already in rdi, unadjusted
 ```
 
-Compare with the C++ path: one load instead of two, and **no thunks**, because
-`this` never needs adjusting - the data pointer always points at the whole
-object.
+Compare with technique 1: one load instead of two, and **no thunks**, because
+the receiver never needs adjusting - the data pointer always points at the
+whole object.
 
 What you give up:
 
@@ -113,29 +121,38 @@ What you give up:
   because the set of (type, interface) pairs is only known once the program is
   linked.
 
-The trade is real and neither side is obviously right: C++ pays per object and
-per cast so that dispatch is uniform and pointers stay one word; Go and Rust
-pay per interface value so that objects stay clean and calls stay flat.
+The trade is real and neither side is obviously right. Put the tables *in the
+object* and pointers stay one word, dispatch is uniform, and any pointer can be
+interrogated - but objects grow a vptr per interface and conversions have to
+move the pointer. Put the tables *beside the object* and objects stay clean and
+calls stay flat - but interface values are two words and a bare pointer no
+longer knows anything about itself.
 
-## Technique 3: interface dispatch by search (the JVM way)
+## Technique 3: do not lay anything out, look it up by name
 
-The JVM's `invokeinterface` cannot use a fixed slot number, because a class may
-implement many interfaces with conflicting numbering. Historically it searched
-the class's interface method table; modern JVMs use per-class itables plus
-inline caching at the call site. The observable consequence is folklore you may
-have heard: `invokeinterface` used to be measurably slower than `invokevirtual`.
-Today, with inline caches, the difference is usually noise - which is itself a
-lesson about how much of "dispatch cost" is really "prediction and inlining
-cost".
+The most flexible option is to give up on slots entirely and resolve the method
+by name at the moment of the call. Python is the pure form: an object conforms
+to an interface if it happens to have the attributes, nothing is declared, and
+`Protocol` classes exist only so that a type checker can say something useful
+before run time. There is no layout question because there is no layout - and
+no fixed cost either, which is why [exercise 08](../exercises/08-message-passing/)
+spends its second half building caches.
+
+The JVM sits in between: `invokeinterface` cannot use a fixed slot number,
+since a class may implement many interfaces with conflicting numbering, so it
+uses per-class tables plus inline caching at the call site. The folklore that
+`invokeinterface` is slower than `invokevirtual` was once true and is now
+mostly noise - which is itself a lesson about how much of "dispatch cost" is
+really prediction and inlining cost.
 
 ## Choosing
 
 | You want | Use |
 | --- | --- |
-| One-word pointers, uniform dispatch, downcasting | Secondary vtables (C++) |
-| Clean objects, no thunks, structural conformance | Fat pointers (Go, Rust) |
-| Retrofitting behaviour onto types you do not own | Fat pointers or message passing |
-| Many interfaces per type, dynamic loading | Name-based dispatch plus caches (JVM, Objective-C) |
+| One-word pointers, uniform dispatch, downcasting | Secondary vtables in the object |
+| Clean objects, no thunks, structural conformance | Fat pointers beside the object (Go, Rust) |
+| Retrofitting behaviour onto types you do not own | Fat pointers, or name lookup |
+| Maximum flexibility, cost recovered by caching | Name lookup (Python, Objective-C, the JVM's interfaces) |
 
 Next: [runtime type information](05-rtti.md), which is what makes downcasting
 possible at all.

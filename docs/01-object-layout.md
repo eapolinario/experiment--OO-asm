@@ -37,10 +37,14 @@ Two consequences follow immediately, and both matter:
 
 ## The receiver
 
-A method is a function whose first argument is the object. C++ writes that
-argument invisibly and calls it `this`; Python writes it explicitly and calls
-it `self`; Rust writes `&self`; Go writes an explicit receiver before the
-function name. On System V x86-64 all of them put it in `rdi`.
+A method is a function whose first argument is the object. Python writes that
+argument out and calls it `self`; Rust writes `&self`; Go names a receiver
+before the function name; C++ and Java pass it invisibly as `this`. On System V
+x86-64 all of them put it in `rdi`.
+
+Python is the honest one here. `def area(self)` is not a quirk of the syntax,
+it is the calling convention written down: `Circle.area(c)` and `c.area()` are
+the same call, and the second form is sugar that supplies `self` for you.
 
 ```asm
 ; void point_translate(Point *this, long dx, long dy)
@@ -88,7 +92,8 @@ perfectly. Compare with a language where every element is a separately
 allocated, headered object reached through a pointer: same code, an order of
 magnitude more memory traffic. This single layout difference is most of what
 "data-oriented design" is arguing about, and most of the gap between a Java
-`Point[]` and a C++ `std::vector<Point>`.
+`list` of point objects and a contiguous array of them - and most of why
+NumPy exists.
 
 ## Encapsulation is a linkage property
 
@@ -102,15 +107,20 @@ symbol does not exist outside the file that defines it.
 extern Stack_push
 ```
 
-This is the same technique as C's opaque pointers (`FILE*`, `pthread_mutex_t`)
-and C++'s pimpl idiom. Note what it costs: because the client hard-codes the
-size, changing the layout is an **ABI break**. The class must be recompiled
-along with every client. Real libraries deal with this by allocating through a
-factory function (so only the library knows the size), or by reserving padding,
-or by putting everything behind a pointer. `private` in C++ deliberately does
-*not* do this: private members are part of the class layout, visible in the
-header, and changing them breaks the ABI - `private` controls access, not
-knowledge.
+This is the same technique as C's opaque pointers (`FILE*`, `pthread_mutex_t`).
+Note what it costs: because the client hard-codes the size, changing the layout
+is a compatibility break. Every client must be rebuilt. Libraries dodge this by
+allocating through a factory function, so that only the library ever knows the
+size.
+
+It is worth being precise about what is being hidden, because most languages
+hide less than this. A `private` field in a compiled language is usually still
+part of the published layout - the compiler refuses to *name* it, but its size
+and position are baked into every client. Python hides even less: `_private` is
+a convention, and `obj.__dict__` will hand over everything regardless. What we
+are doing here is stronger than either, and it is also the most restrictive:
+the client knows a number and six symbols, and can be handed a completely
+different implementation without noticing.
 
 The invariant is the reason to bother. `0 <= len <= cap` is checked inside
 `Stack_push` and nowhere else, and because no outside code can modify `len`,
@@ -119,21 +129,32 @@ the set of places that could break it is one file instead of one program.
 ## Name mangling
 
 The assembler has one flat namespace, so `push` cannot belong to two classes.
-Prefixing the class name (`Stack_push`) is the whole technique; C++ does the
-same thing and adds parameter types so that overloads get distinct symbols:
+Prefixing the class name - `Stack_push` - is the whole technique.
 
-```
-Stack::push(long)   ->  _ZN5Stack4pushEl
-                         | |    |    |
-                         | |    |    +-- parameter list: long
-                         | |    +------- method name, length-prefixed
-                         | +------------ class name, length-prefixed
-                         +-------------- nested-name encoding
+If that sounds like a crude workaround, note that Python does exactly the same
+thing, at the source level, and calls it a feature:
+
+```python
+class Stack:
+    def __init__(self):
+        self.__items = []       # stored as _Stack__items
+
+>>> s.__items
+AttributeError: 'Stack' object has no attribute '__items'
+>>> s._Stack__items            # the mangled name is right there
+[]
 ```
 
-`c++filt` reverses it. Every "undefined symbol: _ZN..." you have ever seen is
-this, and the reason C++ has no stable cross-compiler ABI on Windows is that
-Microsoft mangles differently.
+Any attribute beginning with two underscores gets the class name spliced into
+it, for precisely our reason: to keep a name in one class from colliding with
+the same name in another. Python's version is a namespacing tool that stops a
+subclass from clobbering a base class's attribute by accident, not a security
+boundary - which is exactly the status of `Stack_push` here.
+
+Compiled languages take it further and encode parameter types into the symbol
+as well, so that overloaded functions get distinct names. That is why linker
+errors in those languages are full of unreadable identifiers, and why they ship
+a tool to decode them.
 
 ## What it costs
 

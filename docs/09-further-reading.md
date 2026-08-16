@@ -1,25 +1,32 @@
 # Further reading
 
-Sources worth going to directly, grouped by the technique they explain. Where a
-document is normative (an ABI, a runtime's source) it is marked as such,
-because those are the ones that settle arguments.
+Sources worth going to directly, grouped by the technique they explain.
 
-## The ABI, normatively
+## An object system you can read
 
-- **Itanium C++ ABI** - <https://itanium-cxx-abi.github.io/cxx-abi/abi.html>.
-  The document every non-Microsoft C++ compiler follows. Read section 2.5 for
-  vtable layout (offset-to-top, typeinfo, the address point), section 2.6 for
-  virtual base offsets, and section 5.1 for name mangling. Exercise 06's
-  `offset_to_top` and adjustor thunks are this document, simplified.
+- **CPython's `Include/object.h`.** Twenty minutes with this file is the
+  shortest path from "objects are a language feature" to "objects are a struct
+  with a header". `PyObject` is a refcount and a type pointer - exercises 10
+  and 04, in that order. `PyTypeObject` is a table of function-pointer slots:
+  `tp_repr`, `tp_call`, `tp_iter`, `tp_getattro`. That is the vtable.
+- **`Objects/typeobject.c`**, for the parts that are harder than they look:
+  `_PyType_Lookup` and its method cache (exercise 08), MRO computation
+  (exercise 05), and the `tp_basicsize` layout rules that produce the
+  "multiple bases have instance lay-out conflict" error (exercise 06).
+- **`Modules/gcmodule.c` and `Include/refcount.h`**, for reference counting
+  plus the cycle collector that has to exist alongside it (exercise 10).
+- **The `ctypes` and `struct` modules**, for poking at exercise 01's world from
+  Python: explicit layout, explicit padding, explicit alignment.
+
+## The layer underneath
+
 - **System V AMD64 psABI** -
   <https://gitlab.com/x86-psABIs/x86-64-ABI>. Argument registers, stack
-  alignment, the red zone, and why `this` is in `rdi`.
-- **Stanley Lippman, *Inside the C++ Object Model* (1996).** Still the best
-  single explanation of how C++ features become memory layout: vptr placement,
-  constructor semantics, the cost of virtual inheritance.
-- **Bjarne Stroustrup, "Multiple Inheritance for C++" (1989).** The original
-  design of the secondary-vtable-plus-thunk arrangement, by the person who had
-  to make it work.
+  alignment, the red zone, and why the receiver is in `rdi`.
+- **Stanley Lippman, *Inside the C++ Object Model* (1996).** If you want the
+  fully worked version of exercises 04 to 06 in a compiled language - vptr
+  placement, constructor semantics, and the real cost of multiple and virtual
+  inheritance - this is still the clearest treatment.
 
 ## Doing this in C, seriously
 
@@ -104,16 +111,15 @@ Verify flags against your own compiler version; the dump options in particular
 move around between releases.
 
 ```console
-# What does the compiler actually lay out?
-g++ -fdump-lang-class -c shapes.cpp      # vtable and class layout dumps
-clang++ -Xclang -fdump-record-layouts -c shapes.cpp
-clang++ -Xclang -fdump-vtable-layouts -c shapes.cpp
+# What does an object actually look like, from Python?
+python3 -c "import sys; print(sys.getsizeof(object()), sys.getsizeof(1))"
+python3 -c "import ctypes; print(ctypes.sizeof(ctypes.c_void_p))"
+python3 -c "import sys; x=[]; print(sys.getrefcount(x))"    # exercise 10
+python3 -c "print(int.__mro__)"                             # exercises 05, 07
 
-# What did it emit?
-g++ -O0 -S -masm=intel shapes.cpp        # readable assembly
-objdump -d -M intel --demangle a.out
-nm -C a.out | grep vtable
-c++filt _ZThn16_N4Duck4swimEv            # decode a thunk name
+# What did the assembler emit?
+objdump -d -M intel --no-show-raw-insn ./build/04-vtables
+nm ./build/04-vtables | grep vtable
 
 # Where did the padding go?
 pahole -C Sprite ./program               # struct layout with holes marked

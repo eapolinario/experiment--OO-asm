@@ -39,9 +39,13 @@ function pointers. Fix the meaning of each index. Then:
 ```
 
 Two loads and an indirect call, in that order and with that dependency chain.
-This is what `virtual` compiles to in C++, what every non-final method call in
-Java compiles to before the JIT devirtualizes it, and what a `dyn Trait` call
-compiles to in Rust.
+Every mainstream object system does some version of this: it is what a virtual
+call compiles to in a compiled language, what a method call in the JVM does
+before the JIT devirtualizes it, and what CPython does at the C level - an
+object's `ob_type` pointer is the vptr, and `PyTypeObject`'s `tp_repr`,
+`tp_call`, `tp_iter` and friends are numbered slots holding function pointers.
+When `repr(x)` runs, the interpreter loads `x->ob_type`, reads a fixed slot,
+and calls through it.
 
 The properties that make it the default choice everywhere:
 
@@ -67,8 +71,8 @@ Insert a method in the middle and recompile only some of the classes, and the
 program calls the wrong function with no diagnostic anywhere. Nothing crashes;
 the answers are just wrong. Consequences in the real world:
 
-- **Adding a virtual function to a published C++ base class breaks binary
-  compatibility.** Not source compatibility - the recompiled world is fine -
+- **In a compiled language, adding a virtual function to a published base
+  class breaks binary compatibility.** Not source compatibility - the recompiled world is fine -
   but every DLL/`.so` compiled against the old header now indexes a different
   table. This is why Qt has `d_ptr`, why COM interfaces are immutable by rule
   (you publish `IFoo2`), and why library authors sometimes reserve unused
@@ -104,8 +108,8 @@ Rect - a pattern real predictors learn.
 call can be inlined, and inlining is what enables constant folding, dead code
 elimination and vectorisation downstream. A virtual call is an optimisation
 barrier unless the compiler can prove the target. This is why `final` (Java,
-Kotlin, C++11) is a performance annotation, why devirtualization is a real pass
-in every serious compiler, and why JITs go to enormous lengths to speculate on
+Kotlin, and modern C++) is a performance annotation, why devirtualization is a
+real pass in every serious compiler, and why JITs go to enormous lengths to speculate on
 types and then guard the speculation.
 
 ## Where the vtable lives
@@ -129,9 +133,9 @@ the object starts behaving differently without a single field changing.
   observing with it: observing an object silently reclasses it into a generated
   subclass whose setters post notifications.
 - **Smalltalk** exposes it as `become:`.
-- **C++ does it to you** during construction and destruction: a base
-  constructor installs the base vtable, and the derived constructor overwrites
-  it afterwards. That is exactly why a virtual call inside a base constructor
+- **Compiled languages do it to you** during construction and destruction: a
+  base constructor installs the base vtable, and the derived constructor
+  overwrites it afterwards. That is exactly why a virtual call inside a base constructor
   does not reach the derived override - see [inheritance](03-inheritance.md).
 - **The JVM forbids it**, which is precisely what lets the JIT install a type
   guard and trust it.
@@ -141,7 +145,7 @@ the object starts behaving differently without a single field changing.
 | Strategy | Call cost | Extensible? | Used by |
 | --- | --- | --- | --- |
 | Direct call | 1 branch, inlinable | No | non-virtual methods, `final` |
-| Vtable slot | 2 loads + indirect branch | Yes | C++, Java, C# |
+| Vtable slot | 2 loads + indirect branch | Yes | C++, Java, C#, CPython's `tp_` slots |
 | Fat pointer (data + itable) | 1 load + indirect branch | Yes | Go interfaces, Rust `dyn Trait` |
 | Name lookup + cache | Hash/compare + indirect branch | Very | Objective-C, Ruby, Python |
 | Inline cache (monomorphic) | Compare + direct branch | Very | JS engines, JVM JIT |

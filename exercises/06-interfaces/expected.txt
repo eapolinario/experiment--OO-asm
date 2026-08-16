@@ -13,7 +13,7 @@ Two clients, each fluent in exactly one interface:
 
 The secondary call goes through an adjustor thunk:
   is the secondary quack slot the real Duck_quack?  no   (it is a thunk)
-  g++ emits that thunk as _ZThn16_N4Duck5quackEv
+  every object holding two dispatch tables needs one of these
   it runs `sub rdi, 16` then jumps into Duck_quack, no frame of its own
   so quack, though called on duck+16, still read the complete-object volume=11
 

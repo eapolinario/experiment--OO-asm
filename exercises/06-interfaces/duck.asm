@@ -38,7 +38,7 @@ global Duck_swimmer_vtable
 Duck_quacker_vtable:
     dq DUCK_K                           ; MI_VT_OFFSET_TO_TOP = 16
     dq Duck_class                       ; MI_VT_CLASS
-    dq Duck_quack_thunk                 ; slot QUACKER_QUACK -> _ZThn16_N4Duck5quackEv
+    dq Duck_quack_thunk                 ; slot QUACKER_QUACK -> thunk -> Duck_quack
 global Duck_quacker_vtable
 
 ; The fat-pointer alternative: a Go-style itable. The data half of a fat
@@ -123,7 +123,7 @@ Duck_quack:
     epilogue
 
 ; ---------------------------------------------------------------------------
-; Duck_quack_thunk - the adjustor thunk, g++ name _ZThn16_N4Duck5quackEv.
+; Duck_quack_thunk - the adjustor thunk.
 ;
 ; Called with rdi = Quacker subobject pointer (complete + DUCK_K). It subtracts
 ; DUCK_K to recover the complete object and tail-jumps into the real method, so
