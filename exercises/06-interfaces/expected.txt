@@ -1,0 +1,29 @@
+== 06 | interfaces: two vtables in one object, and the pointer that has to move ==
+
+One object, two interfaces, two vptrs at two offsets:
+  Swimmer subobject at +0, Quacker subobject at +16  (two bases, two offsets)
+  two interface pointers into the SAME duck differ by 16 bytes
+  offsetof(Duck,volume)=24 sits past the Quacker subobject at +16
+
+Two clients, each fluent in exactly one interface:
+  the pond holds a Swimmer* (here, the whole duck) and calls swim:
+  [Swimmer] Mallard paddles across the pond
+  the sound check holds a Quacker* (duck + 16) and calls quack:
+  [Quacker] Mallard quacks, volume 11
+
+The secondary call goes through an adjustor thunk:
+  is the secondary quack slot the real Duck_quack?  no   (it is a thunk)
+  g++ emits that thunk as _ZThn16_N4Duck5quackEv
+  it runs `sub rdi, 16` then jumps into Duck_quack, no frame of its own
+  so quack, though called on duck+16, still read the complete-object volume=11
+
+offset_to_top recovers the whole object (what dynamic_cast<void*> does):
+  the Quacker vtable's offset_to_top = 16
+  complete = Quacker* - offset_to_top;  equals the original Duck*?  yes
+
+The alternative: a fat pointer, the way Go and Rust do it:
+  a fat Quacker value is two words: (data = whole duck, *itab)
+  no thunk needed - the data word already points at the complete object:
+  [Quacker] Mallard quacks, volume 11
+  fat data pointer vs complete object: 0 bytes apart
+  the receiver fix-up moved out of the call path and into a 2-word pointer

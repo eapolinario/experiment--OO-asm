@@ -1,0 +1,48 @@
+== 05 | inheritance: a derived object is a base object with more on the end ==
+
+The base object is a prefix of the derived object:
+  offsetof(Account,balance)=16  offsetof(Savings,balance)=16  (identical)
+  sizeof(Account)=40  sizeof(Savings)=56  (base + 16 new bytes)
+  Savings* used as Account* adjusts the address by 0 bytes
+  a base-only reader, handed that Savings* as-is, sees $1000.00
+
+The derived vtable is the base's, some slots overwritten, some appended:
+  Account has 4 method slots, SavingsAccount has 5  (one appended)
+  slot 3 (summary):   same pointer in Account and Savings vtables?  yes
+  slot 2 (month_end): same pointer in Account and Savings vtables?  no
+  class walk: SavingsAccount.parent -> "Account"
+  the inherited Account_summary, dispatched on each object:
+  summary: a "SavingsAccount" account, #1500, holding $1000.00
+  summary: a "CheckingAccount" account, #2500, holding $300.00
+  appended slot, callable only as a SavingsAccount: rate = 2.50%
+
+Construction runs base-first, so a mid-build virtual call sees the base:
+  during construction, a virtual kind() returned  "Account"
+  after construction,  the same call returns      "SavingsAccount"
+  the derived vptr is installed only after Account_init returns
+
+An override can call the base implementation directly:
+  before: periods=0  balance $300.00
+  Checking_month_end advances the period (base) then charges the fee (override):
+  after:  periods=1  balance $295.00
+
+One array of Account*, three concrete classes, one loop:
+  Account         #9001  month-end credited $ 0.00  -> balance $  50.00
+  SavingsAccount  #1001  month-end credited $25.00  -> balance $1025.00
+  CheckingAccount #2001  month-end charged  $ 5.00  -> balance $ 295.00
+  SavingsAccount  #1002  month-end credited $ 0.50  -> balance $  50.50
+  CheckingAccount #2002  month-end charged  $ 5.00  -> balance $   5.00
+  one vcall month_end drove all five; each class chose interest or fee
+
+A virtual destructor keeps the books balanced; a non-virtual one leaks:
+  sv + ck + array constructed    live objects=7  heap blocks=13
+  correct: account_delete dispatches through the virtual destructor slot
+  after account_delete on all 7  live objects=0  heap blocks=0
+  each derived dtor freed its note, each base dtor closed the object -> 0 / 0
+  bug: account_delete_nonvirtual binds ~Account statically, skipping ~Savings
+  one SavingsAccount constructed live objects=1  heap blocks=2
+  the block about to leak holds the string "passbook-for-savings-3001"
+  after the non-virtual delete   live objects=0  heap blocks=1
+  objects balanced, but one block outlives every object: the orphaned note
+  after reclaiming the note      live objects=0  heap blocks=0
+  a leak detector finds it; we free it by hand so the program ends at zero
