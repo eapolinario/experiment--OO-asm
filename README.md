@@ -39,6 +39,45 @@ $ nix flake check             # builds and runs everything in a sandbox
 Targets x86-64 Linux (System V ABI, ELF, PIE). libc is borrowed for `printf`
 and `malloc` and nothing else - everything above the allocator is written here.
 
+## What you need to know
+
+Less assembly than you would expect, and more pointers.
+
+**You need to be comfortable with pointers.** That is the actual prerequisite.
+Everything here is "a register holds an address, and the field is at a constant
+offset from it". If `p->field` compiling to `[base + 8]` sounds reasonable, you
+can read this. If you have never worked with a pointer, start with C or Go for
+a week and come back - the exercises will fight you otherwise.
+
+**You do not need to know assembly.** You need to *read* about twenty
+instructions, five of which are most of the text: `mov` (copy), `lea` (compute
+an address without dereferencing it), `call`/`ret`, `push`/`pop`, plus
+`cmp`/`test` and the conditional jumps. There is no SIMD, no floating point
+(everything is fixed-point integers), no syscalls, and no string instructions.
+You are never asked to write assembly to follow along, only to modify it if you
+want to try the exercises at the end of each README.
+
+**The conventions are documented where they are used.**
+[`include/abi.inc`](include/abi.inc) is a crib sheet for the calling
+convention: which registers pass arguments, which are yours to clobber, and the
+stack alignment rule. Read it once before exercise 01 and refer back. Two
+things are assumed rather than taught, and both only matter if you start
+editing: how the linker resolves symbols across files, and why addresses are
+rip-relative in a position-independent executable.
+
+**The ramp is not even.** Exercises 01 to 05 build steadily and each one is
+short. Exercise 06 is the first genuine step up - it is about pointer
+adjustment, and the difficulty is conceptual rather than instructional.
+Exercise 08 is the densest code in the repository, because a cache is
+bookkeeping. If you stall, the exercise READMEs and [`docs/`](docs/) explain
+the same idea in prose, and every program prints its own evidence, so running
+it is often faster than reading it.
+
+**If you are here from a high-level language**, the payoff is in `docs/`. The
+running comparison is Python, because CPython is an object system written in C
+and the mapping is exact rather than metaphorical: `ob_type` is the vptr,
+`PyTypeObject`'s slots are the vtable, `Py_INCREF` is exercise 10.
+
 ## The ladder
 
 | # | Exercise | Technique | The point |
