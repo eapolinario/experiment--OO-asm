@@ -65,16 +65,6 @@ The exercise READMEs explain *this program*. The documents in
 [`docs/`](docs/) explain *the technique*: what problem it solves, how it is
 laid out in memory, what it costs, and what real toolchains do differently.
 
-C++ is cited more often than any other language in those documents, for the
-reasons set out in [the thesis](docs/00-thesis.md#why-c-keeps-coming-up): it is
-the only mainstream language whose object model sits at this abstraction level,
-and the only one with a normative ABI document to check a hand-rolled design
-against. The closest analogue to what this repository actually does is the
-object systems people build in plain C - GObject, the kernel's
-`file_operations`, CPython's `PyTypeObject` - and the second half of the ladder
-leaves the C++ tradition behind entirely for Smalltalk, Self, JavaScript and
-the reference-counting runtimes.
-
 - [00 - The thesis](docs/00-thesis.md): what "object oriented" decomposes into,
   and why knowing that is useful
 - [01 - Object layout and the receiver](docs/01-object-layout.md): offsets,
