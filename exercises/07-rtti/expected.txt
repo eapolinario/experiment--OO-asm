@@ -1,0 +1,36 @@
+== 07 | runtime type information: objects that know their own type ==
+
+One vtable, two jobs - dispatch (slot 1) and identity (slot 0):
+  Stream                 buffered byte sink
+  FileStream             fd=3
+  CompressedFileStream   fd=4, ratio=75%
+  Widget                 8x6 pixels
+
+is_a two ways: a parent-chain walk and Cohen's O(1) display:
+  CompressedFileStream is-a CompressedFileStream   walk=yes cohen=yes  (agree)
+  CompressedFileStream is-a FileStream             walk=yes cohen=yes  (agree)
+  CompressedFileStream is-a Stream                 walk=yes cohen=yes  (agree)
+  CompressedFileStream is-a Widget                 walk=no  cohen=no   (agree)
+  FileStream           is-a CompressedFileStream   walk=no  cohen=no   (agree)
+  FileStream           is-a Stream                 walk=yes cohen=yes  (agree)
+  Stream               is-a FileStream             walk=no  cohen=no   (agree)
+  Widget               is-a Stream                 walk=no  cohen=no   (agree)
+  walk is O(depth), cohen is O(1), and they never disagree
+
+A checked downcast is a maybe you must branch on:
+  a CompressedFileStream -> CompressedFileStream*: ok, ratio=75%
+  a FileStream           -> CompressedFileStream*: NULL, took the safe branch
+
+Filtering a heterogeneous array by type:
+  keep is-a Stream:
+    [0] Stream               kept
+    [1] FileStream           kept
+    [2] CompressedFileStream kept
+    [3] Widget               dropped
+    -> 3 of 4 matched
+  keep is-a FileStream:
+    [0] Stream               dropped
+    [1] FileStream           kept
+    [2] CompressedFileStream kept
+    [3] Widget               dropped
+    -> 2 of 4 matched

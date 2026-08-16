@@ -1,0 +1,36 @@
+== 08 | message passing: dispatch by name, resolved at run time ==
+
+Selectors intern, so selector equality is a pointer compare:
+  intern("speak") twice -> one selector    yes
+  intern("speak") vs intern("purr")        no
+
+Dispatch by name walks the class chain:
+  the Critter says (nothing in particular)
+  the Rex says Woof
+  the Felix says Meow
+  describe lives only on Animal; Dog and Cat inherit it up the chain
+  speak is overridden on Dog and Cat, shadowing Animal's version
+
+Runtime extension: existing objects gain a method instantly:
+  before it exists, the message bounces:
+  [doesNotUnderstand] a Dog received 'fetch'
+  ... class_add_method(Dog, "fetch", Dog_fetch) ...
+  after adding it, the same Rex responds:
+  Rex fetches the ball
+
+Unknown selectors are handled, not fatal:
+  [doesNotUnderstand] a Cat received 'quack'
+
+Forwarding: a Proxy answers by delegating to the object it holds:
+  proxy forwards 'speak' -> Woof
+  proxy forwards 'fetch' -> fetches the ball
+  [doesNotUnderstand] a Dog received 'quack'
+  proxy forwarded 'quack' to its Dog, which did not understand it either
+
+Method caches turn a chain walk into a compare:
+  monomorphic 6x 'legs' (one class, so the class never changes):
+    inline-cache hits=5 misses=1 | class-cache hits=0 misses=1
+  polymorphic  6x 'legs' (two classes, alternating every send):
+    inline-cache hits=0 misses=6 | class-cache hits=4 misses=2
+  the inline cache hits while the class is stable and misses when it alternates;
+  the per-class cache still absorbs the alternating case after warm-up
