@@ -1,0 +1,48 @@
+== 09 | prototypes: objects that delegate, no classes required ==
+
+Keys are interned, so a chain walk compares pointers, not spellings:
+  intern() maps two spellings of "w" to one pointer:     yes
+  the two sources were at different addresses:           yes
+
+get walks proto links; depth is the link the property was found at:
+  get(child, "w")        = 2      found at depth 1
+  get(child, "h")        = 3      found at depth 1
+  get(child, "name")     = base   found at depth 1
+  get(child, "kind")     = shape  found at depth 2
+  get(base,  "kind")     = shape  found at depth 1
+
+A method is a property whose value is a code pointer; send binds this:
+  send(child, "area")            = 6
+  send(base,  "area")            = 6
+
+set always writes to the receiver; the prototype is never touched:
+  set(child, "w", 10)
+  get(child, "w")        = 10     found at depth 0
+  get(base,  "w")        = 2      found at depth 0
+  send(child, "area")            = 30
+  send(base,  "area")            = 6
+
+Object.create: a clone starts empty and answers through its prototype:
+  clone own-property count       = 0
+  get(clone, "area")     found at depth 1
+  send(clone, "area")            = 6
+  set(clone, "w", 5)
+  send(clone, "area")            = 15
+  clone own-property count       = 1
+
+Add a method to the prototype and every existing child gains it at once:
+  base responds to "perimeter" before?                   no
+  set(base, "perimeter", <code>)
+  base responds to "perimeter" after?                    yes
+  send(child, "perimeter")       = 26
+  send(clone, "perimeter")       = 16
+  send(base,  "perimeter")       = 10
+
+Override on one child and only that child sees the new version:
+  set(child, "perimeter", <own code>)
+  send(child, "perimeter")       = 13
+  send(clone, "perimeter")       = 16
+
+Prototypes are ordinary heap objects; nobody frees them for you:
+  live objects before cleanup    = 4
+  live objects after  cleanup    = 0

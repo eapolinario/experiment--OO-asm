@@ -1,0 +1,63 @@
+== 10 | reference counting: who decides when an object dies ==
+
+retain and release adjust a counter in the object header:
+  Node_new("solo")       refcount = 1
+  rc_retain(solo)        refcount = 2
+  rc_release(solo)       refcount = 1
+  rc_release(solo): last reference, destructor runs
+  destroyed solo
+  live objects = 0   live blocks = 0
+
+Ownership through composition: releasing the root frees the tree:
+  built  doc -> { section-1 -> { para }, section-2 }
+  live objects = 4   live blocks = 4
+  rc_release(doc):
+  destroyed para
+  destroyed section-1
+  destroyed section-2
+  destroyed doc
+  live objects = 0   live blocks = 0
+
+Sharing: one object, two owners, released one at a time:
+  owner-1 and owner-2 both retain shared
+  shared                 refcount = 2
+  live objects = 3   live blocks = 3
+  rc_release(owner-1):
+  destroyed owner-1
+  shared (1 owner left)  refcount = 1
+  rc_release(owner-2):
+  destroyed shared
+  destroyed owner-2
+  live objects = 0   live blocks = 0
+
+A cycle is the leak that reference counting cannot fix:
+  cycle-A and cycle-B each retain the other
+  cycle-A.refs = 2    cycle-B.refs = 2
+  drop both external references:
+  cycle-A.refs = 1    cycle-B.refs = 1
+  live objects = 2   live blocks = 2
+  break one edge by hand:
+  destroyed cycle-A
+  destroyed cycle-B
+  live objects = 0   live blocks = 0
+
+Weak references observe a target without keeping it alive:
+  created w1, w2 as weak references to target
+  target                 refcount = 1
+  weak_alive(w1)         = yes
+  weak_alive(w2)         = yes
+  weak_delete(w1) while target alive: unlinks from the list
+  target                 refcount = 1
+  weak_alive(w2)         = yes
+  rc_release(target):
+  destroyed target
+  weak_alive(w2)         = no
+  live objects = 0   live blocks = 0
+
+A cycle with one weak edge is reclaimed correctly:
+  node-A owns node-B strongly; node-B refers to node-A weakly
+  release the only strong external reference:
+  destroyed node-B
+  destroyed node-A
+  weak back-reference    = no
+  live objects = 0   live blocks = 0
