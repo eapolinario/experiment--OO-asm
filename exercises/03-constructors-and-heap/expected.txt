@@ -1,0 +1,25 @@
+== 03 | constructors, destructors, and objects that outlive their scope ==
+
+new = allocate, then construct:
+  Text_new(8)    "" len=0 cap=8
+  + "hello"      "hello" len=5 cap=8
+  + ", world"    "hello, world" len=12 cap=16
+  after Text_new + appends           live objects=1  heap blocks=2
+
+The same constructor, different storage:
+  in-place Text  "constructed on the stack" len=24 cap=25
+  the object's bytes came from the stack, its buffer from malloc
+  after in-place construction        live objects=2  heap blocks=3
+  Text_destroy frees the buffer but never the object itself
+  after Text_destroy                 live objects=1  heap blocks=2
+  destroying an already-destroyed object is a no-op, not a crash
+  after a second Text_destroy        live objects=1  heap blocks=2
+
+Destructors are not optional:
+  Text_new(4)    "leaked" len=6 cap=8
+  nothing in the machine noticed; that is what makes leaks expensive
+  leaked object still alive          live objects=2  heap blocks=4
+  after Text_delete(leaked)          live objects=1  heap blocks=2
+
+delete = destruct, then deallocate:
+  after Text_delete(greeting)        live objects=0  heap blocks=0

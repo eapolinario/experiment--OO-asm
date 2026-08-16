@@ -1,0 +1,15 @@
+== 02 | methods, `this`, and a representation you cannot see ==
+
+The client allocates bytes, not fields:
+  STACK_SIZEOF published by stack.inc = 80 bytes
+
+Two instances, one code path:
+  s1:  depth=3 top=30 capacity=8
+  s2:  depth=1 top=7 capacity=8
+  the only difference between those calls was the value in rdi
+
+The invariant lives in one place:
+  filled s2 to capacity: depth=8
+  Stack_push on a full stack returned 0, depth is still 8
+  popped: 8 7 6 5 4 3 2 1
+  Stack_pop on an empty stack returned 0
