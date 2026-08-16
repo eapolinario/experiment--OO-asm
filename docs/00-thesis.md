@@ -59,6 +59,39 @@ vtable, GObject is a full class system with signals, and Postgres, libcurl and
 SQLite all ship dispatch tables. Knowing the techniques means recognising the
 shape and choosing deliberately, instead of reinventing a worse version.
 
+## Why C++ keeps coming up
+
+It will be obvious from the documents that follow that C++ is cited more than
+any other language. That is not advocacy, and this is not a repository about
+C++. There are three specific reasons, and it is worth naming them so you can
+discount them where they do not apply:
+
+1. **It sits at the same abstraction level we do.** A C++ object *is* the thing
+   we build here: a vptr at offset 0, a per-class table, thunks where the
+   pointer has to move. Ask how a Java, Python or Go object is laid out and the
+   honest answer involves a runtime that reserves the right to change its mind.
+2. **Its ABI is written down.** The Itanium C++ ABI specifies offset-to-top,
+   the typeinfo slot, the address point, and the mangled names of adjustor
+   thunks. It is the only place you can check a hand-rolled design against a
+   normative document instead of against folklore.
+3. **Its notorious gotchas are this mechanism, showing through.** A virtual
+   call in a constructor reaching the base version, slicing, the virtual
+   destructor rule, an ABI break from adding one virtual function - each is a
+   direct consequence of something an exercise builds, which makes them useful
+   payoffs rather than trivia.
+
+The nearest thing to what we are actually doing, though, is not C++ at all: it
+is the object systems people build in **C**, which has no object features
+whatsoever. GObject, the kernel's `file_operations`, COM's immutable
+interfaces, CPython's `PyTypeObject`. Those are the strongest evidence for the
+thesis, because nobody there was handed the discipline by a compiler.
+
+And the second half of the ladder deliberately leaves the C++ tradition
+behind. Exercise 08 is Smalltalk and Objective-C, exercise 09 is Self and
+JavaScript, exercise 10 spends as much time on CPython, ARC and Rust as on
+`shared_ptr`. Those techniques have no C++ analogue, which is precisely why
+they are in here.
+
 ## Ground rules for the experiment
 
 - **x86-64 System V, NASM syntax, ELF.** The techniques are architecture
