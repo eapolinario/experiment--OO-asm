@@ -9,6 +9,7 @@
 %define LIBC_INC
 
 extern printf
+extern snprintf
 extern puts
 extern putchar
 extern malloc

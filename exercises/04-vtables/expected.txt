@@ -1,0 +1,25 @@
+== 04 | vtables: one call site, several implementations ==
+
+Four Shape pointers, one loop, four implementations:
+  Circle      r=3      area= 28.26  perimeter= 18.84
+  Rect        4x5      area= 20.00  perimeter= 18.00
+  Circle      r=1      area=  3.14  perimeter=  6.28
+  Rect        2x2      area=  4.00  perimeter=  8.00
+
+The client never learns what it is talking to:
+  total area = 55.40, summed by `mov rax,[rdi]` + `call [rax+8]`
+  the loop never branches on a type tag - there is no type tag
+
+Dispatch is data, not identity:
+  two Circles share one vtable                   yes
+  a Circle and a Rect share a vtable             no
+  bytes of dispatch machinery per instance       8
+  bytes of method table per class                32
+
+Swapping the vptr swaps the behaviour:
+  before Rect_enable_debug:
+  Rect        4x5      area= 20.00  perimeter= 18.00
+  after  Rect_enable_debug (one store to offset 0):
+  Rect[debug] 4x5      area= 20.00  perimeter= 18.00
+                (dispatched through Rect[debug]'s vtable: class=Rect, instance size=24)
+  not one field changed; only the pointer at offset 0 did

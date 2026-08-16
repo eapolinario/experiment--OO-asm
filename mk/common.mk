@@ -13,9 +13,14 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 
 NASM      ?= nasm
 CC        ?= cc
-# -w-reloc-rel-dword: rip-relative references from .text into .rodata/.data are
-# exactly what a PIE wants; NASM 3.x flags them under -w+all anyway.
-NASMFLAGS ?= -f elf64 -g -F dwarf -w+all -w-reloc-rel-dword -w-orphan-labels \
+# Two warnings are silenced on purpose, because both fire on code that is
+# correct and central to the experiment:
+#   reloc-rel-dword  rip-relative references from .text into .rodata/.data,
+#                    i.e. every `lea rdi, [msg]` in a PIE.
+#   reloc-abs-qword  absolute 64-bit addresses in .data, i.e. every vtable
+#                    entry. The dynamic loader relocates these at startup.
+NASMFLAGS ?= -f elf64 -g -F dwarf -w+all -w-orphan-labels \
+             -w-reloc-rel-dword -w-reloc-abs-qword \
              -I$(ROOT)/include/
 CFLAGS    ?=
 LDFLAGS   ?=
