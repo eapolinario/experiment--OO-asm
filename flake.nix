@@ -26,7 +26,7 @@
             binutils
             gdb
             file
-          ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+          ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
             valgrind
             strace
           ];
@@ -36,7 +36,7 @@
             echo "  make          # assemble + link every exercise"
             echo "  make test     # run every exercise, diff against expected.txt"
             echo "  make list     # show the exercise ladder"
-            ${pkgs.lib.optionalString (!pkgs.stdenv.hostPlatform.isx86_64 || !pkgs.stdenv.isLinux) ''
+            ${pkgs.lib.optionalString (!pkgs.stdenv.hostPlatform.isx86_64 || !pkgs.stdenv.hostPlatform.isLinux) ''
               echo
               echo "WARNING: exercises target x86_64-linux; this host is ${system}."
             ''}
