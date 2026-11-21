@@ -35,6 +35,7 @@
             echo "oo-asm dev shell"
             echo "  make          # assemble + link every exercise"
             echo "  make test     # run every exercise, diff against expected.txt"
+            echo "  make viz      # draw the memory maps, where an exercise has them"
             echo "  make list     # show the exercise ladder"
             ${pkgs.lib.optionalString (!pkgs.stdenv.hostPlatform.isx86_64 || !pkgs.stdenv.hostPlatform.isLinux) ''
               echo
