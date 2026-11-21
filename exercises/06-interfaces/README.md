@@ -140,6 +140,34 @@ and into the pointer's width.
   value, with the data pointer sitting zero bytes from the complete object -
   the thunk's job done by the pointer's shape instead.
 
+## Look at the picture
+
+```console
+$ make viz
+```
+
+The diagram at the top of this file, drawn from the duck the program actually
+constructed - four panels: the layout with its two arrows converging on one
+class descriptor, the two interface pointers measured 16 bytes apart, the fat
+pointer that needs neither, and the call path:
+
+**Generated output**
+
+```
+  what the sound check does   the adjustor thunk          the real method
+  +----------------------+    +----------------------+    +--------------------+
+  | rdi = duck + 16      |--->| sub rdi, 16          |--->| rdi = duck + 0     |
+  +----------------------+    +----------------------+    +--------------------+
+  | call [vptr + 16]     |    | jmp Duck_quack       |    | reads +24 volume=11|
+  +----------------------+    +----------------------+    +--------------------+
+```
+
+Every number there is read back out of the object system: the 16 the thunk
+subtracts is the secondary vtable's `offset_to_top` field, the `+16` the client
+calls through is `MI_VT_SLOT(0)`, the distance between the two interface
+pointers is measured by subtracting them, and the word `(thunk)` appears beside
+that slot in panel 1 only because the slot compared unequal to `Duck_quack`.
+
 ## Try this
 
 - Delete the `sub rdi, DUCK_K` from `Duck_quack_thunk` and rerun. `volume`

@@ -1,0 +1,91 @@
+== 04 | vtables, drawn from the objects themselves ==
+
+One object, one table, one class:
+  Circle instance (heap)  Circle vtable (shared)          class descriptor
+  +----------------+      +--------------------------+    +--------------------+
+  | +0   vptr      |----->| +0   Class*  Circle      |--->| +0   name   Circle |
+  +----------------+      +--------------------------+    +--------------------+
+  | +8   r = 3     |      | +8   slot 0  area        |    | +8   size   16     |
+  +----------------+      +--------------------------+    +--------------------+
+                          | +16  slot 1  perimeter   |    | +16  parent -      |
+                          +--------------------------+    +--------------------+
+                          | +24  slot 2  show        |
+                          +--------------------------+
+  bytes per instance, from Class.size            16
+  therefore rows in the instance box             2
+  bytes of method table, one per class           32
+  offset the arrow leaves from (Object.vptr)     0
+
+One table per class, however many instances:
+  Circle r=3                            Circle vtable (.data, one per class)
+  +----------------+                    +--------------------------+
+  | +0   vptr      |--------+---------->| +0   Class*  Circle      |
+  +----------------+        |           +--------------------------+
+  | +8   r = 3     |        |           | +8   slot 0  area        |
+  +----------------+        |           +--------------------------+
+  Circle r=1                |           | +16  slot 1  perimeter   |
+  +----------------+        |           +--------------------------+
+  | +0   vptr      |--------+           | +24  slot 2  show        |
+  +----------------+                    +--------------------------+
+  | +8   r = 1     |                    Rect vtable
+  +----------------+                    +--------------------------+
+  Rect 4x5                      +------>| +0   Class*  Rect        |
+  +----------------+            |       +--------------------------+
+  | +0   vptr      |------------+       | +8   slot 0  area        |
+  +----------------+                    +--------------------------+
+  | +8   w = 4     |                    | +16  slot 1  perimeter   |
+  +----------------+                    +--------------------------+
+  | +16  h = 5     |                    | +24  slot 2  show        |
+  +----------------+                    +--------------------------+
+  the two Circles' vptrs hold the same address   yes
+  the Rect's vptr holds that address too         no
+  tables drawn above, for three objects          2
+
+Swapping the vptr swaps the behaviour:
+  before Rect_enable_debug:
+  Rect instance                         the table it was born with
+  +----------------+                    +--------------------------+
+  | +0   vptr      |------------------->| +0   Class*  Rect        |
+  +----------------+                    +--------------------------+
+  | +8   w = 4     |                    | +8   slot 0  area        |
+  +----------------+                    +--------------------------+
+  | +16  h = 5     |                    | +16  slot 1  perimeter   |
+  +----------------+                    +--------------------------+
+                                        | +24  slot 2  show        | differs
+                                        +--------------------------+
+                                        the table Rect_enable_debug stores
+                                        +--------------------------+
+                                        | +0   Class*  Rect        |
+                                        +--------------------------+
+                                        | +8   slot 0  area        |
+                                        +--------------------------+
+                                        | +16  slot 1  perimeter   |
+                                        +--------------------------+
+                                        | +24  slot 2  show        | differs
+                                        +--------------------------+
+
+  after Rect_enable_debug - one store to offset 0:
+  Rect instance                         the table it was born with
+  +----------------+                    +--------------------------+
+  | +0   vptr      |--------+           | +0   Class*  Rect        |
+  +----------------+        |           +--------------------------+
+  | +8   w = 4     |        |           | +8   slot 0  area        |
+  +----------------+        |           +--------------------------+
+  | +16  h = 5     |        |           | +16  slot 1  perimeter   |
+  +----------------+        |           +--------------------------+
+                            |           | +24  slot 2  show        | differs
+                            |           +--------------------------+
+                            |           the table Rect_enable_debug stores
+                            |           +--------------------------+
+                            +---------->| +0   Class*  Rect        |
+                                        +--------------------------+
+                                        | +8   slot 0  area        |
+                                        +--------------------------+
+                                        | +16  slot 1  perimeter   |
+                                        +--------------------------+
+                                        | +24  slot 2  show        | differs
+                                        +--------------------------+
+  words the two Rect tables agree on, of 4       3
+  the slot number they disagree on               2
+  fields of the object that changed              0
+  class read back through the new table          Rect

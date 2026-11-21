@@ -11,12 +11,7 @@
 %include "object.inc"
 %include "shape.inc"
 %include "report.inc"
-
-struc Rect
-    .vptr:      resq 1
-    .w:         resq 1
-    .h:         resq 1
-endstruc
+%include "shape_layout.inc"
 
 section .rodata
 name_rect:      db "Rect", 0

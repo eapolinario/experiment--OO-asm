@@ -23,8 +23,9 @@ jobs:
             experimental-features = nix-command flakes
 
       # Builds every exercise and runs its golden-output test inside the nix
-      # sandbox, which is the same thing `make test` does locally - so CI
-      # cannot drift from the developer experience.
+      # sandbox, including expected-viz.txt for exercises that draw themselves.
+      # This is the same thing `make test` does locally - so CI cannot drift
+      # from the developer experience.
       - name: nix flake check
         run: nix flake check -L
 

@@ -68,6 +68,40 @@ Exercise 08 builds the other side of that trade-off: dispatch by name.
   forbids it, which is one reason the JIT can trust a call site's type
   feedback.
 
+## Look at the picture
+
+```console
+$ make viz
+```
+
+Three panels, drawn from the objects this exercise builds rather than typed
+out: the canonical object/vtable/class triple, then three instances sharing
+two tables - the two Circles' arrows *merge*, because their vptrs hold the same
+word - and then the swizzle, before and after:
+
+**Generated output**
+
+```
+  Rect instance                         the table it was born with
+  +----------------+                    +--------------------------+
+  | +0   vptr      |--------+           | +0   Class*  Rect        |
+  +----------------+        |           +--------------------------+
+  | +8   w = 4     |        |           | +8   slot 0  area        |
+  +----------------+        |           +--------------------------+
+  | +16  h = 5     |        |           | +16  slot 1  perimeter   |
+  +----------------+        |           +--------------------------+
+                            |           | +24  slot 2  show        | differs
+                            |           +--------------------------+
+                            |           the table Rect_enable_debug stores
+                            |           +--------------------------+
+                            +---------->| +0   Class*  Rect        |
+                                        +--------------------------+
+```
+
+Only the arrow moved. `viz.asm` compares the two tables word by word to find
+which slot they disagree on - three of the four words are identical - and marks
+that row itself.
+
 ## Look at the machine code
 
 ```console

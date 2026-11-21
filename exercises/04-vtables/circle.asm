@@ -10,11 +10,7 @@
 %include "object.inc"
 %include "shape.inc"
 %include "report.inc"
-
-struc Circle
-    .vptr:      resq 1                  ; MUST be first: the object model says so
-    .r:         resq 1
-endstruc
+%include "shape_layout.inc"
 
 section .rodata
 name_circle:    db "Circle", 0

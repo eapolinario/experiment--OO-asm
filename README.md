@@ -24,9 +24,11 @@ function pointers, and rules that nobody enforces except you.
 $ nix develop                 # nasm, gcc, gdb, valgrind, make
 $ make                        # assemble and link every exercise
 $ make test                   # run them all, diff against the golden output
+$ make viz                    # draw the memory maps, where an exercise has them
 $ make list                   # the ladder, with one-line summaries
 
 $ make -C exercises/04-vtables run       # one exercise
+$ make -C exercises/04-vtables viz       # the same objects, drawn
 $ make -C exercises/04-vtables disas     # what the assembler really emitted
 ```
 
@@ -154,18 +156,68 @@ Everything from exercise 04 onward obeys three rules, defined in
 Exercise 06 has to extend that layout, and the fact that it *has* to is one of
 the more interesting things in the repository.
 
+## Seeing it
+
+Every technique here is the same picture - 8-byte words in a box, and arrows
+between boxes - so some exercises ship a second program that draws it:
+
+```console
+$ make -C exercises/06-interfaces viz
+```
+
+**Generated output**
+
+```
+  complete Duck (heap)          primary vtable (Swimmer)
+  +----------------------+      +--------------------------+
+  | +0   swimmer_vptr    |----->| +0   offset_to_top 0     |
+  +----------------------+      +--------------------------+
+  | +8   name  Mallard   |      | +8   Class*  Duck        |-+  class
+  +----------------------+      +--------------------------+ |  +--------------+
+  | +16  quacker_vptr    |--+   | +16  slot 0 swim         | ++>| name   Duck  |
+  +----------------------+  |   +--------------------------+  | +--------------+
+  | +24  volume = 11     |  |   secondary vtable (Quacker)    | | size   32    |
+  +----------------------+  |   +--------------------------+  | +--------------+
+                            +-->| +0   offset_to_top 16    |  | | parent -     |
+                                +--------------------------+  | +--------------+
+                                | +8   Class*  Duck        |--+
+                                +--------------------------+
+                                | +16  slot 0 quack (thunk)|
+                                +--------------------------+
+```
+
+That is not ASCII art. `viz.asm` links against the exercise's own classes,
+builds the same objects, and reads the picture back out of them: the box is
+`Class.size / 8` rows tall, the arrows leave the rows the vptrs actually
+occupy, `offset_to_top` prints 0 and 16 because that is what those two vtables
+hold, and the `(thunk)` is there because the slot compared unequal to
+`Duck_quack`. Add a field and the box grows a row with nobody editing a
+diagram.
+
+The drawings obey the same rule as the programs - offsets, sizes and
+comparisons, never an address - so they are golden-tested too, and `make test`
+fails if a picture stops matching the code it claims to describe.
+
+Exercises 04 and 06 draw themselves today; the other eight print their evidence
+in prose. [`include/viz.inc`](include/viz.inc) documents the geometry if you
+want to add one.
+
 ## Repository layout
 
 ```
 flake.nix                 pinned toolchain; `nix flake check` runs everything
 Makefile                  drives every exercise
-mk/common.mk              per-exercise rules: all, run, test, record, disas
+mk/common.mk              per-exercise rules: all, run, viz, test, record, disas
 include/
   abi.inc                 System V calling convention, prologue/epilogue, print
   object.inc              the object model: vptr, vtable, Class, vcall
   libc.inc                the few libc symbols we borrow
+  viz.inc                 the drawing API: word boxes, arrows, panel geometry
+lib/
+  viz.asm                 the text canvas itself, shared by every viz.asm
 docs/                     the technique deep dives
-exercises/NN-name/        sources, README.md, expected.txt, Makefile
+exercises/NN-name/        sources, README.md, expected.txt, Makefile - plus
+                          viz.asm and expected-viz.txt where it draws itself
 ```
 
 Tests are golden-output diffs, which has a useful side effect: an exercise may
@@ -182,10 +234,16 @@ these subobjects?).
   Nothing comments `mov rax, 5`.
 - New exercises get a directory, a `Makefile` containing one `include` line,
   a README with the same section structure, and a recorded `expected.txt`.
+- A `viz.asm`, where an exercise has one, supplies its own `main` and links
+  against that exercise's classes but not its `main.asm`. It may print offsets,
+  sizes and comparisons, and must derive them from the objects rather than
+  restate them, so the picture cannot disagree with the program.
 
 ## Status
 
-The ten exercises and the docs are done. Open
+The ten exercises and the docs are done. Exercises 04 and 06 also draw
+themselves; extending that to the other eight is the most obvious open task.
+Other
 [issues](https://github.com/eapolinario/experiment--OO-asm/issues) track the
 stretch goals: an AArch64 port, a dispatch benchmark, a diff against what g++
 actually emits, exceptions and stack unwinding, and a mark-and-sweep collector
