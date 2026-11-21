@@ -20,7 +20,7 @@ One object, two vptrs, two tables, one class:
   vptrs inside one object                        2
   offset the second subobject begins at          16
   both tables carry the same Class*              yes
-  offsetof(Duck,volume), past the Quacker at +16 24
+  offsetof(Duck,volume), past the Quacker subobject 24
 
 The pointer that has to move:
                     complete Duck (heap)
@@ -34,7 +34,7 @@ The pointer that has to move:
                     | +24  volume = 11     |
                     +----------------------+
   measured Quacker* - Duck*, in bytes            16
-  offsetof(Duck,volume), past the Quacker at +16 24
+  offsetof(Duck,volume), past the Quacker subobject 24
 
 The secondary call, and the three instructions in the way:
   what the sound check does   the adjustor thunk          the real method

@@ -32,6 +32,11 @@ extern Duck_swim                        ; the real Swimmer method body
 %define MIVTW           28              ; a vtable with its two header words
 %define CLSW            16
 
+%define DUCK_SWIMMER_WORD  (Duck.swimmer_vptr/8)
+%define DUCK_NAME_WORD     (Duck.name/8)
+%define DUCK_QUACKER_WORD  (Duck.quacker_vptr/8)
+%define DUCK_VOLUME_WORD   (Duck.volume/8)
+
 ;; duck_box x, y, duckreg
 ;;   The complete object. Row offsets come from the `struc Duck` labels, so the
 ;;   two vptr rows are wherever duck.inc actually put them.
@@ -40,12 +45,12 @@ extern Duck_swim                        ; the real Swimmer method body
     mov     rax, [rax + Class.size]
     shr     rax, 3                      ; as many rows as the object is words
     vbox    %1, %2, DUCKW, rax
-    vputf   %1+1, VIZ_ROW(%2,0), fmt_swimmer, Duck.swimmer_vptr
+    vputf   %1+1, VIZ_ROW(%2,DUCK_SWIMMER_WORD), fmt_swimmer, Duck.swimmer_vptr
     mov     r11, [%3 + Duck.name]
-    vputf   %1+1, VIZ_ROW(%2,1), fmt_name, Duck.name, r11
-    vputf   %1+1, VIZ_ROW(%2,2), fmt_quacker, Duck.quacker_vptr
+    vputf   %1+1, VIZ_ROW(%2,DUCK_NAME_WORD), fmt_name, Duck.name, r11
+    vputf   %1+1, VIZ_ROW(%2,DUCK_QUACKER_WORD), fmt_quacker, Duck.quacker_vptr
     mov     r11, [%3 + Duck.volume]
-    vputf   %1+1, VIZ_ROW(%2,3), fmt_volume, Duck.volume, r11
+    vputf   %1+1, VIZ_ROW(%2,DUCK_VOLUME_WORD), fmt_volume, Duck.volume, r11
 %endmacro
 
 ;; mi_vtable_box x, y, vtreg, real_method_reg
@@ -95,6 +100,8 @@ fmt_sub:        db " sub rdi, %ld", 0
 fmt_reads:      db " reads +%ld volume=%ld", 0
 fmt_fat_word:   db " +%-3ld %s", 0
 fmt_itab:       db " +%-3ld %-6s %s", 0
+fmt_at_offset:  db "duck + %ld", 0
+fmt_gap:        db "%ld bytes apart", 0
 
 lbl_duck:       db "complete Duck (heap)", 0
 lbl_primary:    db "primary vtable (Swimmer)", 0
@@ -132,7 +139,7 @@ s_plus16:       db "duck + 16", 0
 q_two_vptrs:    db "vptrs inside one object", 0
 q_second_at:    db "offset the second subobject begins at", 0
 q_same_class:   db "both tables carry the same Class*", 0
-q_volume_past:  db "offsetof(Duck,volume), past the Quacker at +16", 0
+q_volume_past:  db "offsetof(Duck,volume), past the Quacker subobject", 0
 q_measured:     db "measured Quacker* - Duck*, in bytes", 0
 q_is_body:      db "the secondary slot holds Duck_quack itself", 0
 q_is_thunk:     db "it holds Duck_quack_thunk", 0
@@ -188,8 +195,8 @@ panel_layout:
 
     ; One arrow per vptr, leaving the row that vptr occupies. The second one
     ; has to bend, which is the whole exercise in one glyph.
-    vflat   2+DUCKW, VIZ_ROW(1,0), 31
-    varrow  2+DUCKW, VIZ_ROW(1,2), 31, VIZ_ROW(9,0), 28
+    vflat   2+DUCKW, VIZ_ROW(1,DUCK_SWIMMER_WORD), 31
+    varrow  2+DUCKW, VIZ_ROW(1,DUCK_QUACKER_WORD), 31, VIZ_ROW(9,0), 28
     ; Both tables point at one class descriptor: the arrows converge.
     varrow  32+MIVTW, VIZ_ROW(1,1), 63, VIZ_ROW(5,0), 61
     varrow  32+MIVTW, VIZ_ROW(9,1), 63, VIZ_ROW(5,0), 62
@@ -242,28 +249,28 @@ panel_pointers:
     vputs   20, 0, lbl_duck
     duck_box 20, 1, rbx
 
-    vputs   2, VIZ_ROW(1,0), lbl_swimmer_p
-    vputs   2, VIZ_ROW(1,2), lbl_quacker_p
-    vflat   11, VIZ_ROW(1,0), 19
-    vflat   11, VIZ_ROW(1,2), 19
+    vputs   2, VIZ_ROW(1,DUCK_SWIMMER_WORD), lbl_swimmer_p
+    vputs   2, VIZ_ROW(1,DUCK_QUACKER_WORD), lbl_quacker_p
+    vflat   11, VIZ_ROW(1,DUCK_SWIMMER_WORD), 19
+    vflat   11, VIZ_ROW(1,DUCK_QUACKER_WORD), 19
 
     ; A bracket measuring the distance the second pointer has to travel.
-    vputs   49, VIZ_ROW(1,0), s_plus0
-    vputs   49, VIZ_ROW(1,2), s_plus16
+    vputf   49, VIZ_ROW(1,DUCK_SWIMMER_WORD), fmt_at_offset, 0
+    vputf   49, VIZ_ROW(1,DUCK_QUACKER_WORD), fmt_at_offset, Duck.quacker_vptr
     mov     rdx, '+'
-    mov     rsi, VIZ_ROW(1,0)
+    mov     rsi, VIZ_ROW(1,DUCK_SWIMMER_WORD)
     mov     rdi, 47
     call    viz_putc
     mov     rcx, '|'
-    mov     rdx, 3
-    mov     rsi, VIZ_ROW(1,0)+1
+    mov     rdx, VIZ_ROW(1,DUCK_QUACKER_WORD)-VIZ_ROW(1,DUCK_SWIMMER_WORD)-1
+    mov     rsi, VIZ_ROW(1,DUCK_SWIMMER_WORD)+1
     mov     rdi, 47
     call    viz_vline
     mov     rdx, '+'
-    mov     rsi, VIZ_ROW(1,2)
+    mov     rsi, VIZ_ROW(1,DUCK_QUACKER_WORD)
     mov     rdi, 47
     call    viz_putc
-    vputs   49, VIZ_ROW(1,1), s_gap
+    vputf   49, VIZ_ROW(1,(DUCK_SWIMMER_WORD+DUCK_QUACKER_WORD)/2), fmt_gap, Duck.quacker_vptr-Duck.swimmer_vptr
     call    viz_flush
 
     mov     rdx, r12

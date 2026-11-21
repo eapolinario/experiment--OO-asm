@@ -24,6 +24,7 @@
 %include "libc.inc"
 %include "object.inc"
 %include "shape.inc"
+%include "shape_layout.inc"
 %include "viz.inc"
 
 extern Circle_new                       ; Circle *Circle_new(long r)
@@ -52,38 +53,44 @@ extern Rect_enable_debug                ; void    Rect_enable_debug(Rect *)
 ;;   The row offsets come from VT_CLASS and VT_SLOT(n) in object.inc, so the
 ;;   numbers in the picture are the same ones the `vcall` macro indexes with.
 %macro vtable_box 3
-    vbox    %1, %2, VTW, 1 + SHAPE_SLOTS
+    mov     r15, %2
+    vbox    %1, r15, VTW, 1 + SHAPE_SLOTS
     mov     r11, [%3 + VT_CLASS]
     mov     r10, [r11 + Class.name]
-    vputf   %1+1, VIZ_ROW(%2, 0), fmt_vt_class, VT_CLASS, r10
+    lea     rsi, [r15 + 1]
+    vputf   %1+1, rsi, fmt_vt_class, VT_CLASS, r10
   %assign vt_i 0
   %rep SHAPE_SLOTS
     lea     r10, [slot_names]
     mov     r10, [r10 + 8*vt_i]
-    vputf   %1+1, VIZ_ROW(%2, 1+vt_i), fmt_vt_slot, VT_SLOT(vt_i), vt_i, r10
+    lea     rsi, [r15 + 3 + 2*vt_i]
+    vputf   %1+1, rsi, fmt_vt_slot, VT_SLOT(vt_i), vt_i, r10
     %assign vt_i vt_i+1
   %endrep
 %endmacro
 
-;; swizzle_panel vt_a, vt_b, target_y
+;; swizzle_panel vt_a, vt_b, second_vt_y, target_y
 ;;   The Rect, both candidate tables, and one arrow - to whichever table the
 ;;   object's vptr currently holds. Drawn twice, and only the arrow moves.
-%macro swizzle_panel 3
+%macro swizzle_panel 4
     vputs   OBJ_X, 0, lbl_rect
     vputs   VT2_X, 0, lbl_vt_born
-    vputs   VT2_X, 10, lbl_vt_debug
+    mov     rax, %3
+    dec     rax
+    vputs   VT2_X, rax, lbl_vt_debug
 
-    vbox    OBJ_X, 1, OBJW, 3
+    vbox    OBJ_X, 1, OBJW, [rect_words]
     vputf   OBJ_X+1, VIZ_ROW(1,0), fmt_vptr, Object.vptr
     lea     r10, [s_w]
-    mov     r11, [rbx + 8]
-    vputf   OBJ_X+1, VIZ_ROW(1,1), fmt_field, 8, r10, r11
+    mov     r11, [rbx + Rect.w]
+    vputf   OBJ_X+1, VIZ_ROW(1,Rect.w/8), fmt_field, Rect.w, r10, r11
     lea     r10, [s_h]
-    mov     r11, [rbx + 16]
-    vputf   OBJ_X+1, VIZ_ROW(1,2), fmt_field, 16, r10, r11
+    mov     r11, [rbx + Rect.h]
+    vputf   OBJ_X+1, VIZ_ROW(1,Rect.h/8), fmt_field, Rect.h, r10, r11
 
     vtable_box VT2_X, 1, %1
-    vtable_box VT2_X, 11, %2
+    mov     rax, %3
+    vtable_box VT2_X, rax, %2
 
     ; The one word the two tables disagree on, found by comparing them - the
     ; row is computed, VIZ_ROW(y, i) with a runtime i.
@@ -92,11 +99,15 @@ extern Rect_enable_debug                ; void    Rect_enable_debug(Rect *)
     mov     rdi, VT2_X+VTW+1
     call    viz_puts
     lea     rdx, [s_differs]
-    lea     rsi, [r14*2 + 12]           ; VIZ_ROW(11, r14)
+    mov     rsi, %3
+    add     rsi, 1
+    lea     rsi, [rsi + r14*2]          ; VIZ_ROW(rect_vt2_y, r14)
     mov     rdi, VT2_X+VTW+1
     call    viz_puts
 
-    varrow  OBJ_X+OBJW, VIZ_ROW(1,0), VT2_X-1, VIZ_ROW(%3,0), MIDA
+    mov     rsi, %4
+    add     rsi, 1
+    varrow  OBJ_X+OBJW, VIZ_ROW(1,0), VT2_X-1, rsi, MIDA
     call    viz_flush
 %endmacro
 
@@ -171,6 +182,14 @@ obj_c2:         resq 1
 obj_r1:         resq 1
 same_words:     resq 1                  ; words the two Rect tables agree on
 difference_count: resq 1                ; slots that differ, used as a visual invariant
+circle1_words:  resq 1
+circle2_words:  resq 1
+rect_words:     resq 1
+circle1_y:      resq 1
+circle2_y:      resq 1
+rect_y:         resq 1
+rect_vt_y:      resq 1
+rect_vt2_y:     resq 1
 
 section .text
 
@@ -199,8 +218,8 @@ panel_layout:
     vbox    OBJ_X, 1, OBJW, rax
     vputf   OBJ_X+1, VIZ_ROW(1,0), fmt_vptr, Object.vptr
     lea     r10, [s_r]
-    mov     r11, [rbx + 8]
-    vputf   OBJ_X+1, VIZ_ROW(1,1), fmt_field, 8, r10, r11
+    mov     r11, [rbx + Circle.r]
+    vputf   OBJ_X+1, VIZ_ROW(1,Circle.r/8), fmt_field, Circle.r, r10, r11
 
     vtable_box VT1_X, 1, r12
 
@@ -262,53 +281,123 @@ panel_sharing:
     push    r12
     push    r13
     push    r14
+    push    r15
+    push    rax
     mov     rbx, [obj_c1]
     mov     r12, [obj_c2]
     mov     r13, [obj_r1]
 
+    class_of r14, rbx
+    mov     rax, [r14 + Class.size]
+    shr     rax, 3
+    mov     [circle1_words], rax
+
+    class_of r14, r12
+    mov     rax, [r14 + Class.size]
+    shr     rax, 3
+    mov     [circle2_words], rax
+
+    class_of r14, r13
+    mov     rax, [r14 + Class.size]
+    shr     rax, 3
+    mov     [rect_words], rax
+
+    mov     qword [circle1_y], 1
+    mov     rax, [circle1_words]
+    shl     rax, 1
+    add     rax, 3
+    mov     [circle2_y], rax
+    mov     rax, [circle2_words]
+    shl     rax, 1
+    add     rax, 2
+    mov     rdx, [circle2_y]
+    add     rdx, rax
+    mov     [rect_y], rdx
+
+    mov     rax, 3 + 2*(SHAPE_SLOTS + 1)
+    mov     [rect_vt_y], rax
     lea     rdi, [p2_head]
     ccall   printf
 
-    vputs   OBJ_X, 0, lbl_c1
-    vputs   OBJ_X, 6, lbl_c2
-    vputs   OBJ_X, 12, lbl_rect45
+    mov     r14, [circle1_y]
+    dec     r14
+    vputs   OBJ_X, r14, lbl_c1
+    mov     r14, [circle2_y]
+    dec     r14
+    vputs   OBJ_X, r14, lbl_c2
+    mov     r14, [rect_y]
+    dec     r14
+    vputs   OBJ_X, r14, lbl_rect45
     vputs   VT2_X, 0, lbl_vt_circle
-    vputs   VT2_X, 10, lbl_vt_rect
+    mov     r14, [rect_vt_y]
+    dec     r14
+    vputs   VT2_X, r14, lbl_vt_rect
 
-    vbox    OBJ_X, 1, OBJW, 2
-    vputf   OBJ_X+1, VIZ_ROW(1,0), fmt_vptr, Object.vptr
+    mov     r12, [circle1_y]
+    vbox    OBJ_X, r12, OBJW, [circle1_words]
+    mov     r14, r12
+    add     r14, 1
+    vputf   OBJ_X+1, r14, fmt_vptr, Object.vptr
     lea     r10, [s_r]
-    mov     r11, [rbx + 8]
-    vputf   OBJ_X+1, VIZ_ROW(1,1), fmt_field, 8, r10, r11
+    mov     r11, [rbx + Circle.r]
+    mov     r14, r12
+    add     r14, 1 + 2*(Circle.r/8)
+    vputf   OBJ_X+1, r14, fmt_field, Circle.r, r10, r11
 
-    vbox    OBJ_X, 7, OBJW, 2
-    vputf   OBJ_X+1, VIZ_ROW(7,0), fmt_vptr, Object.vptr
+    mov     r12, [circle2_y]
+    vbox    OBJ_X, r12, OBJW, [circle2_words]
+    mov     r14, r12
+    add     r14, 1
+    vputf   OBJ_X+1, r14, fmt_vptr, Object.vptr
     lea     r10, [s_r]
-    mov     r11, [r12 + 8]
-    vputf   OBJ_X+1, VIZ_ROW(7,1), fmt_field, 8, r10, r11
+    mov     r11, [obj_c2]
+    mov     r11, [r11 + Circle.r]
+    mov     r14, r12
+    add     r14, 1 + 2*(Circle.r/8)
+    vputf   OBJ_X+1, r14, fmt_field, Circle.r, r10, r11
 
-    vbox    OBJ_X, 13, OBJW, 3
-    vputf   OBJ_X+1, VIZ_ROW(13,0), fmt_vptr, Object.vptr
+    mov     r12, [rect_y]
+    vbox    OBJ_X, r12, OBJW, [rect_words]
+    mov     r14, r12
+    add     r14, 1
+    vputf   OBJ_X+1, r14, fmt_vptr, Object.vptr
     lea     r10, [s_w]
-    mov     r11, [r13 + 8]
-    vputf   OBJ_X+1, VIZ_ROW(13,1), fmt_field, 8, r10, r11
+    mov     r11, [r13 + Rect.w]
+    mov     r14, r12
+    add     r14, 1 + 2*(Rect.w/8)
+    vputf   OBJ_X+1, r14, fmt_field, Rect.w, r10, r11
     lea     r10, [s_h]
-    mov     r11, [r13 + 16]
-    vputf   OBJ_X+1, VIZ_ROW(13,2), fmt_field, 16, r10, r11
+    mov     r11, [r13 + Rect.h]
+    mov     r14, r12
+    add     r14, 1 + 2*(Rect.h/8)
+    vputf   OBJ_X+1, r14, fmt_field, Rect.h, r10, r11
 
     mov     r14, [rbx + Object.vptr]
-    vtable_box VT2_X, 1, r14
+    mov     r12, [circle1_y]
+    vtable_box VT2_X, r12, r14
     mov     r14, [r13 + Object.vptr]
-    vtable_box VT2_X, 11, r14
+    mov     r12, [rect_vt_y]
+    vtable_box VT2_X, r12, r14
 
     ; Draw the first Circle's arrow, then the second's into the same row: the
     ; elbow joins the line already there instead of drawing a second one.
-    vflat   OBJ_X+OBJW, VIZ_ROW(1,0), VT2_X-1
-    varrow  OBJ_X+OBJW, VIZ_ROW(7,0), VT2_X-1, VIZ_ROW(1,0), MIDA
-    varrow  OBJ_X+OBJW, VIZ_ROW(13,0), VT2_X-1, VIZ_ROW(11,0), MIDB
+    mov     r12, [circle1_y]
+    inc     r12
+    mov     r15, [circle1_y]
+    inc     r15
+    vflat   OBJ_X+OBJW, r12, VT2_X-1
+    mov     r13, [circle2_y]
+    inc     r13
+    varrow  OBJ_X+OBJW, r13, VT2_X-1, r15, MIDA
+    mov     r14, [rect_y]
+    inc     r14
+    mov     r15, [rect_vt_y]
+    inc     r15
+    varrow  OBJ_X+OBJW, r14, VT2_X-1, r15, MIDB
     call    viz_flush
 
     mov     rax, [rbx + Object.vptr]
+    mov     r12, [obj_c2]
     cmp     rax, [r12 + Object.vptr]
     lea     rdx, [s_no]
     lea     rcx, [s_yes]
@@ -319,6 +408,7 @@ panel_sharing:
     ccall   printf
 
     mov     rax, [rbx + Object.vptr]
+    mov     r13, [obj_r1]
     cmp     rax, [r13 + Object.vptr]
     lea     rdx, [s_no]
     lea     rcx, [s_yes]
@@ -334,6 +424,8 @@ panel_sharing:
     xor     eax, eax
     ccall   printf
 
+    pop     rax
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -350,6 +442,15 @@ panel_swizzle:
     push    r13
     push    r14
     mov     rbx, [obj_r1]
+
+    class_of r14, rbx
+    mov     rax, [r14 + Class.size]
+    shr     rax, 3
+    mov     [rect_words], rax
+    shl     rax, 1
+    add     rax, 5
+    mov     [rect_vt2_y], rax
+
     mov     r12, [rbx + Object.vptr]    ; the table it was born with
 
     ; Peek at the debug table's address by installing it and putting the old
@@ -394,13 +495,13 @@ panel_swizzle:
     ccall   printf
     lea     rdi, [p3_before]
     ccall   printf
-    swizzle_panel r12, r13, 1
+    swizzle_panel r12, r13, [rect_vt2_y], 1
 
     mov     rdi, rbx
     call    Rect_enable_debug           ; for real this time
     lea     rdi, [p3_after]
     ccall   printf
-    swizzle_panel r12, r13, 11
+    swizzle_panel r12, r13, [rect_vt2_y], [rect_vt2_y]
 
     mov     rdx, [same_words]
     lea     rsi, [q_identical]

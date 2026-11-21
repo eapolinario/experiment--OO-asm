@@ -35,11 +35,11 @@ test:
 build:
 	@mkdir -p $@
 
-build/viz-test.o: lib/viz_test.asm | build
-	$(NASM) $(NASMFLAGS) -o $@ $<
+build/viz-test.o: lib/viz_test.asm include/abi.inc include/libc.inc include/viz.inc | build
+	$(NASM) $(NASMFLAGS) -MD build/viz-test.d -o $@ $<
 
-build/libviz.o: lib/viz.asm | build
-	$(NASM) $(NASMFLAGS) -o $@ $<
+build/libviz.o: lib/viz.asm include/abi.inc include/libc.inc include/viz.inc | build
+	$(NASM) $(NASMFLAGS) -MD build/libviz.d -o $@ $<
 
 $(VIZ_TEST_BIN): build/viz-test.o build/libviz.o
 	$(CC) -o $@ $^
@@ -56,6 +56,8 @@ test-viz-api: $(VIZ_TEST_BIN)
 		echo "FAIL  viz-api: output does not match lib/expected-viz-test.txt"; \
 		cat build/viz-test.diff; exit 1; \
 	fi
+
+-include build/viz-test.d build/libviz.d
 
 # Every exercise that ships a viz.asm draws itself. The ones that do not say
 # so, which doubles as the to-do list.
